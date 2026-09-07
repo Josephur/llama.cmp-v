@@ -1,0 +1,363 @@
+{
+  "schema_version": 1,
+  "generator": "cmp/hooks/results_index.py",
+  "source_of_truth": "cmp/docs/results/*.md",
+  "note": "Generated. Do not edit. Edit the markdown entry and regenerate.",
+  "schema_reference": null,
+  "entry_count": 1,
+  "entries": [
+    {
+      "mechanism": "sm70-d256-shared-q",
+      "title": "SM70 D256 shared Q and unit rescaling preserve output through 250K",
+      "date": "2026-09-07",
+      "verdict": "kept",
+      "selectors": [],
+      "contexts": [
+        8192,
+        65536,
+        131072,
+        250000
+      ],
+      "byte_exact": true,
+      "deltas": [
+        {
+          "metric": "request wall time",
+          "context": 8192,
+          "change_pct": -0.316226,
+          "model": "primary",
+          "devices": 6,
+          "note": "Shared Q plus unit rescaling against saved original references; single samples and uncontrolled drift."
+        },
+        {
+          "metric": "prompt processing time",
+          "context": 8192,
+          "change_pct": -0.417361,
+          "model": "primary",
+          "devices": 6,
+          "note": "Shared Q plus unit rescaling against saved original references; single samples and uncontrolled drift."
+        },
+        {
+          "metric": "generation time",
+          "context": 8192,
+          "change_pct": 0.081463,
+          "model": "primary",
+          "devices": 6,
+          "note": "Shared Q plus unit rescaling against saved original references; single samples and uncontrolled drift."
+        },
+        {
+          "metric": "request wall time",
+          "context": 65536,
+          "change_pct": -1.386239,
+          "model": "primary",
+          "devices": 6,
+          "note": "Shared Q plus unit rescaling against saved original references; single samples and uncontrolled drift."
+        },
+        {
+          "metric": "prompt processing time",
+          "context": 65536,
+          "change_pct": -1.510815,
+          "model": "primary",
+          "devices": 6,
+          "note": "Shared Q plus unit rescaling against saved original references; single samples and uncontrolled drift."
+        },
+        {
+          "metric": "generation time",
+          "context": 65536,
+          "change_pct": 2.482593,
+          "model": "primary",
+          "devices": 6,
+          "note": "Shared Q plus unit rescaling against saved original references; single samples and uncontrolled drift."
+        },
+        {
+          "metric": "request wall time",
+          "context": 131072,
+          "change_pct": -2.161571,
+          "model": "primary",
+          "devices": 6,
+          "note": "Shared Q plus unit rescaling against saved original references; single samples and uncontrolled drift."
+        },
+        {
+          "metric": "prompt processing time",
+          "context": 131072,
+          "change_pct": -2.183743,
+          "model": "primary",
+          "devices": 6,
+          "note": "Shared Q plus unit rescaling against saved original references; single samples and uncontrolled drift."
+        },
+        {
+          "metric": "generation time",
+          "context": 131072,
+          "change_pct": -0.917041,
+          "model": "primary",
+          "devices": 6,
+          "note": "Shared Q plus unit rescaling against saved original references; single samples and uncontrolled drift."
+        },
+        {
+          "metric": "request wall time",
+          "context": 250000,
+          "change_pct": -2.676602,
+          "model": "primary",
+          "devices": 6,
+          "note": "Shared Q plus unit rescaling against saved original references; single samples and uncontrolled drift.",
+          "headline": true
+        },
+        {
+          "metric": "prompt processing time",
+          "context": 250000,
+          "change_pct": -2.710504,
+          "model": "primary",
+          "devices": 6,
+          "note": "Shared Q plus unit rescaling against saved original references; single samples and uncontrolled drift."
+        },
+        {
+          "metric": "generation time",
+          "context": 250000,
+          "change_pct": -0.635263,
+          "model": "primary",
+          "devices": 6,
+          "note": "Shared Q plus unit rescaling against saved original references; single samples and uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale request wall time vs original reference",
+          "context": 8192,
+          "change_pct": -0.316226,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale request wall time vs first shared-Q",
+          "context": 8192,
+          "change_pct": 0.064568,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale prompt processing time vs original reference",
+          "context": 8192,
+          "change_pct": -0.417361,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale prompt processing time vs first shared-Q",
+          "context": 8192,
+          "change_pct": -0.048316,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale generation time vs original reference",
+          "context": 8192,
+          "change_pct": 0.081463,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale generation time vs first shared-Q",
+          "context": 8192,
+          "change_pct": 0.484038,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale request wall time vs original reference",
+          "context": 65536,
+          "change_pct": -1.386239,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale request wall time vs first shared-Q",
+          "context": 65536,
+          "change_pct": -0.030149,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale prompt processing time vs original reference",
+          "context": 65536,
+          "change_pct": -1.510815,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale prompt processing time vs first shared-Q",
+          "context": 65536,
+          "change_pct": -0.076213,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale generation time vs original reference",
+          "context": 65536,
+          "change_pct": 2.482593,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale generation time vs first shared-Q",
+          "context": 65536,
+          "change_pct": 1.383658,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale request wall time vs original reference",
+          "context": 131072,
+          "change_pct": -2.161571,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale request wall time vs first shared-Q",
+          "context": 131072,
+          "change_pct": 0.024788,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale prompt processing time vs original reference",
+          "context": 131072,
+          "change_pct": -2.183743,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale prompt processing time vs first shared-Q",
+          "context": 131072,
+          "change_pct": 0.011567,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale generation time vs original reference",
+          "context": 131072,
+          "change_pct": -0.917041,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale generation time vs first shared-Q",
+          "context": 131072,
+          "change_pct": 0.784755,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale request wall time vs original reference",
+          "context": 250000,
+          "change_pct": -2.676602,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale request wall time vs first shared-Q",
+          "context": 250000,
+          "change_pct": -0.073207,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale prompt processing time vs original reference",
+          "context": 250000,
+          "change_pct": -2.710504,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale prompt processing time vs first shared-Q",
+          "context": 250000,
+          "change_pct": -0.087055,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale generation time vs original reference",
+          "context": 250000,
+          "change_pct": -0.635263,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        },
+        {
+          "metric": "unit-scale generation time vs first shared-Q",
+          "context": 250000,
+          "change_pct": 0.762114,
+          "model": "primary",
+          "devices": 6,
+          "note": "Single sample; saved comparison; uncontrolled drift."
+        }
+      ],
+      "commit": "4fe5ecd7536bad00fa4f589a293e9284d2086302",
+      "upstream_base": "4d9176092d00586775af140581bb0b558ddc4389",
+      "upstream_prs": [],
+      "patch": "cmp/patches/0001-sm70-d256-shared-q.patch",
+      "evidence": "cmp/docs/results/data/sm70-d256-shared-q-promotion.json",
+      "promotion": "accepted",
+      "tags": [
+        "d256",
+        "flash-attention",
+        "research-snapshot",
+        "shared-memory",
+        "sm70"
+      ],
+      "supersedes": [],
+      "superseded_by": null,
+      "data": [
+        "sm70-d256-shared-q-20260907.csv",
+        "sm70-d256-shared-q-unroll4-20260907.csv",
+        "sm70-d256-shared-q-unit-scale-20260907.csv",
+        "sm70-d256-shared-q-promotion.csv"
+      ],
+      "template": false,
+      "source": "cmp/docs/results/2026-09-07-sm70-d256-shared-q.md",
+      "url": "results/2026-09-07-sm70-d256-shared-q/",
+      "summary": "The user approved the combined shared-Q and unit-rescale candidate as a modestly helpful patch. All four primary contexts preserved exact 256-token output. At 250K, request wall time was 2.677% lower than the original saved reference, saving 86.499 seconds; 2.304 seconds of that saving was incremental to the first shared-Q candidate. Generation regressed at 8K and 65K against the original reference and at every context against the first candidate. Native repeatability and selector attribution remain unproven. The indexed headline now describes the combined candidate; the original measurements below remain unchanged historical evidence."
+    }
+  ],
+  "by_selector": {},
+  "by_verdict": {
+    "kept": [
+      "sm70-d256-shared-q"
+    ]
+  },
+  "by_tag": {
+    "d256": [
+      "sm70-d256-shared-q"
+    ],
+    "flash-attention": [
+      "sm70-d256-shared-q"
+    ],
+    "research-snapshot": [
+      "sm70-d256-shared-q"
+    ],
+    "shared-memory": [
+      "sm70-d256-shared-q"
+    ],
+    "sm70": [
+      "sm70-d256-shared-q"
+    ]
+  }
+}

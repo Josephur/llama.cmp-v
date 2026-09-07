@@ -1,0 +1,52 @@
+From 703d046c78b3ba7565f2605d54e7ba7f701afce6 Mon Sep 17 00:00:00 2001
+From: Joseph Stackhouse <joseph.stackhouse@stack-tech.com>
+Date: Sat, 5 Sep 2026 06:01:47 -0400
+Subject: [PATCH] route Volta Q4_K and Q5_K through the DP4A MMQ configuration
+
+Extends DP4A routing to the Q4_K and Q5_K quantizations on SM70, which the
+default configuration selection did not cover. Shape instrumentation found the
+majority of measured matrix-vector work used grouped shapes these
+quantizations serve.
+
+The effect is strongly context-dependent: a short 4K prompt improved about
+33.7%, while an exact 100K prompt moved 0.09%. It is a short-context win and is
+not represented as a long-context gain.
+
+Deterministic output is retained.
+---
+ ggml/src/ggml-cuda/mmq.cuh | 12 +++++++++++-
+ 1 file changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/ggml/src/ggml-cuda/mmq.cuh b/ggml/src/ggml-cuda/mmq.cuh
+index b4a747720..6a50b00e2 100644
+--- a/ggml/src/ggml-cuda/mmq.cuh
++++ b/ggml/src/ggml-cuda/mmq.cuh
+@@ -245,7 +245,12 @@ static __host__ ggml_cuda_mmq_config ggml_cuda_mmq_get_config(const ggml_type ty
+     if (blackwell_mma_available(cc)) {
+         return ggml_cuda_mmq_get_config_blackwell(type, J, fallback);
+     }
+-    if (ggml_cuda_highest_compiled_arch(cc) >= GGML_CUDA_CC_VOLTA) {
++    const int compiled_arch = ggml_cuda_highest_compiled_arch(cc);
++    if (compiled_arch >= GGML_CUDA_CC_VOLTA) {
++        if (compiled_arch < GGML_CUDA_CC_TURING &&
++            (type == GGML_TYPE_Q4_K || type == GGML_TYPE_Q5_K)) {
++            return ggml_cuda_mmq_get_config_pascal_dp4a(type, J, fallback);
++        }
+         return ggml_cuda_mmq_get_config_ampere(type, J, fallback);
+     }
+     if (ggml_cuda_highest_compiled_arch(cc) >= GGML_CUDA_CC_DP4A) {
+@@ -271,6 +276,11 @@ static constexpr __device__ ggml_cuda_mmq_config ggml_cuda_mmq_get_config(ggml_t
+ #ifdef BLACKWELL_MMA_AVAILABLE
+     return ggml_cuda_mmq_get_config_blackwell(type, J, fallback);
+ #elif __CUDA_ARCH__ >= GGML_CUDA_CC_VOLTA
++#if __CUDA_ARCH__ < GGML_CUDA_CC_TURING
++    if (type == GGML_TYPE_Q4_K || type == GGML_TYPE_Q5_K) {
++        return ggml_cuda_mmq_get_config_pascal_dp4a(type, J, fallback);
++    }
++#endif
+     return ggml_cuda_mmq_get_config_ampere(type, J, fallback);
+ #elif __CUDA_ARCH__ >= GGML_CUDA_CC_DP4A
+     return ggml_cuda_mmq_get_config_pascal_dp4a(type, J, fallback);
+-- 
+2.55.0
+

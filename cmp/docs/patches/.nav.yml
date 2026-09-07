@@ -1,0 +1,12 @@
+title: The patches
+# Dependency order, which is also commit order. Not alphabetical: the registry
+# has to be understood before the mechanisms that are read through it.
+nav:
+  - index.md
+  - research-selectors.md
+  - mmq-dp4a-routing.md
+  - mmq-dp4a-q4k-q5k.md
+  - parallel-model-load.md
+  - mapped-host-bridge.md
+  - prompt-graph-capture-seed.md
+  - device-side-mask-expansion.md

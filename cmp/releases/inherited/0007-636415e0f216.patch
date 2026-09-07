@@ -1,0 +1,384 @@
+From 636415e0f216110dfab887bc81cfa9e324177c70 Mon Sep 17 00:00:00 2001
+From: Joseph Stackhouse <joseph.stackhouse@stack-tech.com>
+Date: Sat, 5 Sep 2026 06:01:47 -0400
+Subject: [PATCH] expand attention masks on the destination device
+
+Attention masks were uploaded to each card in expanded form on every ubatch.
+Across a Gen1 x1 link with no peer path, those bytes are expensive.
+
+This publishes a compact row-visibility hint alongside the mask and
+reconstructs the expanded mask on the destination GPU. It removes the upload
+rather than compressing it, and covers the sparse-attention block bias as well
+as the causal mask.
+
+Default-off, selected by GGML_SCHED_DEVICE_MASK=1. Deterministic output is
+retained.
+---
+ ggml/include/ggml-backend.h     |   8 ++
+ ggml/src/ggml-backend.cpp       | 162 ++++++++++++++++++++++++++++++--
+ src/llama-input-mask-hint.h     |  64 +++++++++++++
+ src/llama-kv-cache.cpp          |  14 ++-
+ src/llama-memory-hybrid-idx.cpp |  14 +++
+ 5 files changed, 251 insertions(+), 11 deletions(-)
+ create mode 100644 src/llama-input-mask-hint.h
+
+diff --git a/ggml/include/ggml-backend.h b/ggml/include/ggml-backend.h
+index cc3f8cd36..7cca60b0d 100644
+--- a/ggml/include/ggml-backend.h
++++ b/ggml/include/ggml-backend.h
+@@ -70,6 +70,14 @@ extern "C" {
+     // tensor copy between different backends
+     GGML_API void ggml_backend_tensor_copy(const struct ggml_tensor * src, struct ggml_tensor * dst);
+ 
++    // Input-mask hint: declares that a [n_cols, n_rows] F16/F32 user-input tensor holds, per row,
++    // exactly `prefix_len[row]` leading elements equal to `prefix_value` followed by elements equal
++    // to `suffix_value` (each `ggml_type_size(tensor->type)` bytes, copied). A backend that can
++    // expand this on device (see "ggml_backend_expand_input_mask" proc address) skips the host copy.
++    GGML_API void ggml_backend_tensor_set_input_mask_hint(const struct ggml_tensor * tensor, const int32_t * prefix_len, int64_t n_rows, int64_t n_cols,
++                                                          const void * prefix_value, const void * suffix_value);
++    GGML_API void ggml_backend_tensor_clear_input_mask_hint(const struct ggml_tensor * tensor);
++
+     //
+     // Backend (stream)
+     //
+diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
+index 6a5ebf747..0e4553ba6 100644
+--- a/ggml/src/ggml-backend.cpp
++++ b/ggml/src/ggml-backend.cpp
+@@ -10,6 +10,7 @@
+ 
+ #include "ggml-backend.h"
+ #include "ggml-backend-impl.h"
++#include "ggml-research.h"
+ #include "ggml-alloc.h"
+ #include "ggml-impl.h"
+ 
+@@ -20,6 +21,7 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include <algorithm>
++#include <mutex>
+ #include <unordered_map>
+ #include <vector>
+ 
+@@ -877,8 +879,94 @@ static void ggml_backend_sched_graph_inputs_grow(ggml_backend_sched_t sched) {
+ 
+ // returns the priority of the backend, lower id is higher priority
+ static bool ggml_backend_sched_cuda_bridge_requested() {
+-    const char * value = getenv("GGML_CUDA_MAPPED_HOST_BRIDGE");
+-    return value != NULL && strcmp(value, "1") == 0;
++    static ggml_research_cached_int selector;
++    return selector.get("GGML_CUDA_MAPPED_HOST_BRIDGE", 0) == 1;
++}
++
++// ---- input-mask hints (device-side mask expansion) ----
++
++struct ggml_backend_input_mask_hint {
++    std::vector<int32_t> prefix_len;
++    int64_t  n_rows = 0;
++    int64_t  n_cols = 0;
++    uint32_t prefix_bits = 0; // element bit pattern (F16 in the low 16 bits, F32 as is)
++    uint32_t suffix_bits = 0;
++};
++
++static std::mutex g_input_mask_hint_mutex;
++static std::unordered_map<const ggml_tensor *, ggml_backend_input_mask_hint> g_input_mask_hints;
++
++void ggml_backend_tensor_set_input_mask_hint(const struct ggml_tensor * tensor, const int32_t * prefix_len, int64_t n_rows, int64_t n_cols,
++                                             const void * prefix_value, const void * suffix_value) {
++    const size_t esz = ggml_type_size(tensor->type);
++    if (esz != 2 && esz != 4) {
++        return;
++    }
++    std::lock_guard<std::mutex> lock(g_input_mask_hint_mutex);
++    ggml_backend_input_mask_hint & hint = g_input_mask_hints[tensor];
++    hint.prefix_len.assign(prefix_len, prefix_len + n_rows);
++    hint.n_rows = n_rows;
++    hint.n_cols = n_cols;
++    hint.prefix_bits = 0;
++    hint.suffix_bits = 0;
++    memcpy(&hint.prefix_bits, prefix_value, esz);
++    memcpy(&hint.suffix_bits, suffix_value, esz);
++}
++
++void ggml_backend_tensor_clear_input_mask_hint(const struct ggml_tensor * tensor) {
++    std::lock_guard<std::mutex> lock(g_input_mask_hint_mutex);
++    g_input_mask_hints.erase(tensor);
++}
++
++// returns true and fills `hint` when a hint matching the tensor geometry exists (the entry is consumed)
++static bool ggml_backend_take_input_mask_hint(const struct ggml_tensor * tensor, ggml_backend_input_mask_hint & hint) {
++    std::lock_guard<std::mutex> lock(g_input_mask_hint_mutex);
++    auto it = g_input_mask_hints.find(tensor);
++    if (it == g_input_mask_hints.end()) {
++        return false;
++    }
++    const bool ok = (tensor->type == GGML_TYPE_F16 || tensor->type == GGML_TYPE_F32) && ggml_is_contiguous(tensor) &&
++        tensor->ne[0] == it->second.n_cols && tensor->ne[1] == it->second.n_rows &&
++        tensor->ne[2] == 1 && tensor->ne[3] == 1;
++    if (ok) {
++        // the same input is copied once per split backend: keep the hint for the whole graph compute
++        hint = it->second;
++    } else {
++        g_input_mask_hints.erase(it);
++    }
++    return ok;
++}
++
++// hints are valid for exactly one graph compute; the scheduler clears them afterwards so a reused
++// tensor address can never be expanded from a stale descriptor
++static void ggml_backend_clear_all_input_mask_hints() {
++    std::lock_guard<std::mutex> lock(g_input_mask_hint_mutex);
++    g_input_mask_hints.clear();
++}
++
++// 0 = off, 1 = expand on device, 2 = expand and validate against the host mask (runtime selector)
++static int ggml_backend_sched_device_mask_mode() {
++    static ggml_research_cached_int selector;
++    return selector.get("GGML_SCHED_DEVICE_MASK", 0);
++}
++
++static bool ggml_backend_sched_input_copy_timing_requested() {
++    static ggml_research_cached_int selector;
++    return selector.get("GGML_SCHED_INPUT_COPY_TIMING", 0) != 0;
++}
++
++typedef bool (*ggml_backend_expand_input_mask_t)(ggml_backend_t backend, struct ggml_tensor * dst, const int32_t * prefix_len, int64_t n_rows, int64_t n_cols, uint32_t prefix_bits, uint32_t suffix_bits);
++
++static ggml_backend_expand_input_mask_t ggml_backend_sched_get_mask_expander(ggml_backend_t backend) {
++    ggml_backend_dev_t dev = ggml_backend_get_device(backend);
++    if (dev == NULL) {
++        return NULL;
++    }
++    ggml_backend_reg_t reg = ggml_backend_dev_backend_reg(dev);
++    if (reg == NULL) {
++        return NULL;
++    }
++    return (ggml_backend_expand_input_mask_t) ggml_backend_reg_get_proc_address(reg, "ggml_backend_expand_input_mask");
+ }
+ 
+ static int ggml_backend_sched_backend_id(ggml_backend_sched_t sched, ggml_backend_t backend) {
+@@ -1728,6 +1816,19 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
+     GGML_ASSERT(sched);
+     struct ggml_backend_sched_split * splits = sched->splits;
+ 
++    // default-off attribution of synchronous user-input uploads, and device-side mask expansion
++    const bool input_copy_timing = ggml_backend_sched_input_copy_timing_requested();
++    const int  device_mask_mode  = ggml_backend_sched_device_mask_mode();
++    static uint64_t input_copy_graph_seq = 0;
++    int64_t  input_copy_us        = 0;
++    size_t   input_copy_bytes     = 0;
++    size_t   input_copy_count     = 0;
++    size_t   input_copy_max_bytes = 0;
++    size_t   mask_expanded_count  = 0;
++    size_t   mask_expanded_bytes  = 0;
++    size_t   mask_validate_bad    = 0;
++    const int64_t t_splits_0 = (input_copy_timing || device_mask_mode) ? ggml_time_us() : 0;
++
+     ggml_tensor * prev_ids_tensor = nullptr;
+     std::vector<int32_t> ids;
+     std::vector<ggml_bitset_t> used_ids;
+@@ -1762,12 +1863,47 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
+                 } else {
+                     ggml_backend_synchronize(split_backend);
+                 }
+-                const bool bridge_copy = ggml_backend_sched_cuda_bridge_requested() &&
+-                    split_backend->iface.cpy_tensor_async != NULL &&
+-                    split_backend->iface.cpy_tensor_async(
+-                        input_backend, split_backend, input, input_cpy);
+-                if (!bridge_copy) {
+-                    ggml_backend_tensor_copy(input, input_cpy);
++                const int64_t t_copy_0 = input_copy_timing ? ggml_time_us() : 0;
++                bool expanded = false;
++                if (device_mask_mode != 0) {
++                    ggml_backend_input_mask_hint hint;
++                    if (ggml_backend_take_input_mask_hint(input, hint)) {
++                        ggml_backend_expand_input_mask_t expand = ggml_backend_sched_get_mask_expander(split_backend);
++                        if (expand != NULL && expand(split_backend, input_cpy, hint.prefix_len.data(), hint.n_rows, hint.n_cols, hint.prefix_bits, hint.suffix_bits)) {
++                            expanded = true;
++                            mask_expanded_count += 1;
++                            mask_expanded_bytes += ggml_nbytes(input);
++                            if (device_mask_mode >= 2) {
++                                // validation: compare the device-expanded mask with the host mask bit for bit
++                                std::vector<uint8_t> check(ggml_nbytes(input));
++                                ggml_backend_synchronize(split_backend);
++                                ggml_backend_tensor_get(input_cpy, check.data(), 0, check.size());
++                                if (memcmp(check.data(), input->data, check.size()) != 0) {
++                                    mask_validate_bad += 1;
++                                    GGML_LOG_ERROR("%s: device mask mismatch for %s [%lld x %lld]\n", __func__, input->name, (long long) input->ne[0], (long long) input->ne[1]);
++                                }
++                            }
++                        }
++                    }
++                }
++                if (!expanded) {
++                    const bool bridge_copy = ggml_backend_sched_cuda_bridge_requested() &&
++                        split_backend->iface.cpy_tensor_async != NULL &&
++                        split_backend->iface.cpy_tensor_async(
++                            input_backend, split_backend, input, input_cpy);
++                    if (!bridge_copy) {
++                        ggml_backend_tensor_copy(input, input_cpy);
++                    }
++                }
++                if (input_copy_timing) {
++                    input_copy_us    += ggml_time_us() - t_copy_0;
++                    if (!expanded) {
++                        input_copy_bytes += ggml_nbytes(input);
++                        if (ggml_nbytes(input) > input_copy_max_bytes) {
++                            input_copy_max_bytes = ggml_nbytes(input);
++                        }
++                    }
++                    input_copy_count += 1;
+                 }
+             } else {
+                 // wait for the split backend to finish using the input before overwriting it
+@@ -1925,6 +2061,16 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
+         prev_backend_id = split_backend_id;
+     }
+ 
++    if (device_mask_mode != 0) {
++        ggml_backend_clear_all_input_mask_hints();
++    }
++    if (input_copy_timing) {
++        ++input_copy_graph_seq;
++        fprintf(stderr, "ggml_sched_input_copy graph=%llu splits=%d inputs=%zu bytes=%zu max_bytes=%zu copy_ms=%.3f submit_ms=%.3f mask_expanded=%zu mask_expanded_bytes=%zu mask_validate_bad=%zu\n",
++                (unsigned long long) input_copy_graph_seq, sched->n_splits, input_copy_count, input_copy_bytes,
++                input_copy_max_bytes, input_copy_us / 1000.0, (ggml_time_us() - t_splits_0) / 1000.0,
++                mask_expanded_count, mask_expanded_bytes, mask_validate_bad);
++    }
+     return GGML_STATUS_SUCCESS;
+ }
+ 
+diff --git a/src/llama-input-mask-hint.h b/src/llama-input-mask-hint.h
+new file mode 100644
+index 000000000..7cf750d6b
+--- /dev/null
++++ b/src/llama-input-mask-hint.h
+@@ -0,0 +1,64 @@
++#pragma once
++
++// Two-value row hints for large user-input tensors (causal KQ masks, sparse-attention block
++// biases). A row that is one value for a prefix and another value for the rest is described by
++// its prefix length; the scheduler can then expand it on the device instead of uploading it.
++// Every row is proven bit for bit with memcmp before a hint is published, so any other content
++// keeps the ordinary host copy.
++
++#include "ggml.h"
++#include "ggml-backend.h"
++#include "ggml-research.h"
++
++#include <cstdlib>
++#include <cstring>
++#include <vector>
++
++static inline bool llama_input_mask_hint_enabled() {
++    // runtime research selector (see ggml-research.h); cached per generation
++    static ggml_research_cached_int selector;
++    return selector.get("GGML_SCHED_DEVICE_MASK", 0) != 0;
++}
++
++// T is the element type (ggml_fp16_t or float, compared as raw bits). Returns true when a hint was published.
++template <typename T>
++static inline bool llama_publish_input_mask_hint(ggml_tensor * dst, int64_t n_rows, int64_t n_cols) {
++    if (!llama_input_mask_hint_enabled() || dst == nullptr || dst->data == nullptr || n_rows <= 0 || n_cols <= 0 || n_cols % 2 != 0 ||
++            (int64_t) ggml_type_size(dst->type) != (int64_t) sizeof(T)) {
++        ggml_backend_tensor_clear_input_mask_hint(dst);
++        return false;
++    }
++    const T * data = (const T *) dst->data;
++    // the two row values come from the first row's ends; every row must use the same pair
++    T a, b;
++    memcpy(&a, data, sizeof(T));
++    memcpy(&b, data + (n_cols - 1), sizeof(T));
++    static thread_local std::vector<T> ref_a, ref_b;
++    static thread_local T ref_a_val, ref_b_val;
++    if ((int64_t) ref_a.size() < n_cols || memcmp(&ref_a_val, &a, sizeof(T)) != 0 || memcmp(&ref_b_val, &b, sizeof(T)) != 0) {
++        ref_a.assign(n_cols, a);
++        ref_b.assign(n_cols, b);
++        ref_a_val = a;
++        ref_b_val = b;
++    }
++    std::vector<int32_t> prefix((size_t) n_rows);
++    for (int64_t i = 0; i < n_rows; ++i) {
++        const T * row = data + i*n_cols;
++        // binary search the first non-`a` element assuming a monotone row, then prove it
++        int64_t lo = 0, hi = n_cols;
++        while (lo < hi) {
++            const int64_t mid = (lo + hi)/2;
++            if (memcmp(row + mid, &a, sizeof(T)) == 0) { lo = mid + 1; } else { hi = mid; }
++        }
++        const int64_t p = lo;
++        const bool ok = (p == 0 || memcmp(row, ref_a.data(), p*sizeof(T)) == 0) &&
++                        (p == n_cols || memcmp(row + p, ref_b.data(), (n_cols - p)*sizeof(T)) == 0);
++        if (!ok) {
++            ggml_backend_tensor_clear_input_mask_hint(dst);
++            return false;
++        }
++        prefix[i] = (int32_t) p;
++    }
++    ggml_backend_tensor_set_input_mask_hint(dst, prefix.data(), n_rows, n_cols, &a, &b);
++    return true;
++}
+diff --git a/src/llama-kv-cache.cpp b/src/llama-kv-cache.cpp
+index a342ee119..c678e21dc 100644
+--- a/src/llama-kv-cache.cpp
++++ b/src/llama-kv-cache.cpp
+@@ -1,5 +1,7 @@
+ #include "llama-kv-cache.h"
+ 
++#include "llama-input-mask-hint.h"
++
+ #include "llama-impl.h"
+ #include "llama-io.h"
+ #include "llama-model.h"
+@@ -1780,9 +1782,15 @@ void llama_kv_cache::set_input_kq_mask(ggml_tensor * dst, const llama_ubatch * u
+         set_input_kq_mask_impl<float>(args, (float *) dst->data, causal_attn);
+     }
+ 
+-    //const int64_t t_end = ggml_time_us();
+-
+-    //LLAMA_LOG_ERROR("%s: kq mask time: %0.3f ms\n", __func__, (t_end - t_start)/1000.0);
++    // Device-side mask hint (see llama-input-mask-hint.h): single-stream F16/F32 masks whose rows
++    // are [keep prefix, drop suffix] are published for on-device expansion; anything else copies.
++    if (n_stream == 1 && !hparams.use_alibi) {
++        if (dst->type == GGML_TYPE_F16) {
++            llama_publish_input_mask_hint<ggml_fp16_t>(dst, n_tokens, n_kv);
++        } else {
++            llama_publish_input_mask_hint<float>(dst, n_tokens, n_kv);
++        }
++    }
+ }
+ 
+ void llama_kv_cache::set_input_pos_bucket(ggml_tensor * dst, const llama_ubatch * ubatch) const {
+diff --git a/src/llama-memory-hybrid-idx.cpp b/src/llama-memory-hybrid-idx.cpp
+index 93b468784..53ffec6fd 100644
+--- a/src/llama-memory-hybrid-idx.cpp
++++ b/src/llama-memory-hybrid-idx.cpp
+@@ -1,5 +1,7 @@
+ #include "llama-memory-hybrid-idx.h"
+ 
++#include "llama-input-mask-hint.h"
++
+ #include "llama-impl.h"
+ #include "llama-batch.h"
+ #include "llama-io.h"
+@@ -676,4 +678,16 @@ void llama_memory_hybrid_idx_context::set_input_qsa(
+     GGML_ASSERT(mem != nullptr);
+ 
+     mem->set_input_qsa(cell_blk, blk_cells, blk_pos, bias, ubatch, ratio, blk_bias);
++
++    // Upstream moved the fill into the memory module; publish the hint after the
++    // delegated call, where `bias` is populated. The per-block bias rows are
++    // [visible-block prefix, always-visible tail].
++    if (blk_bias) {
++        const int64_t n_ns = cell_blk->ne[1];
++        if (n_ns == 1) {
++            const int64_t n_blocks = blk_pos->ne[0]/(4*n_ns);
++            const int64_t n_tps    = ubatch->n_tokens/n_ns;
++            llama_publish_input_mask_hint<float>(bias, n_tps, n_blocks);
++        }
++    }
+ }
+-- 
+2.55.0
+

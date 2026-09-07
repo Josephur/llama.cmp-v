@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "upstream_base": "4d9176092d00586775af140581bb0b558ddc4389",
+  "public_source_tree": "e8387c17492e291814df5b93fa666f55bcd7865e",
+  "patches": [
+    "0001-4e66a8481b33.patch",
+    "0002-703d046c78b3.patch",
+    "0003-bc5cf34c680c.patch",
+    "0004-f9859b80a39c.patch",
+    "0005-e5e027c3fcf6.patch",
+    "0006-3f6f7ee02264.patch",
+    "0007-636415e0f216.patch"
+  ],
+  "validation": "patch-application-and-source-equivalence",
+  "performance_certified": false
+}

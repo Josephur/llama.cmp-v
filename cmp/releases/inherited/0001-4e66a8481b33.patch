@@ -1,0 +1,166 @@
+From 4e66a8481b33f41e8f25b64d083059c529a168a3 Mon Sep 17 00:00:00 2001
+From: Joseph Stackhouse <joseph.stackhouse@stack-tech.com>
+Date: Sat, 5 Sep 2026 06:01:47 -0400
+Subject: [PATCH] force DP4A MMQ routing for tested quantized prefill
+
+On these Volta-generation cards the generic FP16 tensor-core path is not the
+best route for the tested quantized prefill shapes. This adds a runtime
+selection so llama.cpp's DP4A MMQ route can be forced and compared against the
+automatic policy, with focused argument-parser coverage.
+
+One six-card configuration measured 2.36x matched prefill throughput at 128K
+against its automatic policy. Batch-one decode follows different MMVQ
+behaviour, so that result is not represented as a decode gain.
+
+Default-off. Deterministic output is retained.
+---
+ common/arg.cpp            | 25 +++++++++++++++++++++++
+ ggml/src/ggml-cuda/mmq.cu | 43 +++++++++++++++++++++++++++++++++++++++
+ tests/test-arg-parser.cpp | 11 ++++++++++
+ 3 files changed, 79 insertions(+)
+
+diff --git a/common/arg.cpp b/common/arg.cpp
+index 2669cacd6..47bef25f2 100644
+--- a/common/arg.cpp
++++ b/common/arg.cpp
+@@ -26,6 +26,7 @@
+ #include <cinttypes>
+ #include <climits>
+ #include <cmath>
++#include <cstdlib>
+ #include <cstdarg>
+ #include <filesystem>
+ #include <fstream>
+@@ -74,6 +75,16 @@ static std::string read_file(const std::string & fname) {
+     return content;
+ }
+ 
++static void set_process_environment(const char * name, const std::string & value) {
++#if defined(_WIN32)
++    if (_putenv_s(name, value.c_str()) != 0) {
++#else
++    if (setenv(name, value.c_str(), 1) != 0) {
++#endif
++        throw std::runtime_error(string_format("error: failed to set environment variable %s\n", name));
++    }
++}
++
+ static const std::vector<common_arg> & get_common_arg_defs() {
+     static const std::vector<common_arg> options = [] {
+         common_params params;
+@@ -2830,6 +2841,20 @@ common_params_context common_params_parser_init(common_params & params, llama_ex
+             }
+         }
+     ).set_env("LLAMA_ARG_N_GPU_LAYERS"));
++    add_opt(common_arg(
++        {"--cuda-mmq"}, "{auto,force,cublas}",
++        "select CUDA quantized matrix multiplication policy:\n"
++        "- auto: use the built-in dispatch heuristic (default)\n"
++        "- force: use MMQ whenever a supported kernel is available\n"
++        "- cublas: disable MMQ; small-batch MMVQ remains enabled",
++        [](common_params &, const std::string & value) {
++            if (value != "auto" && value != "force" && value != "cublas") {
++                throw std::runtime_error(
++                    string_format("error: unknown value for --cuda-mmq: '%s'\n", value.c_str()));
++            }
++            set_process_environment("GGML_CUDA_MMQ_MODE", value);
++        }
++    ).set_env("LLAMA_ARG_CUDA_MMQ"));
+     add_opt(common_arg(
+         {"-sm", "--split-mode"}, "{none,layer,row,tensor}",
+         "how to split the model across multiple GPUs, one of:\n"
+diff --git a/ggml/src/ggml-cuda/mmq.cu b/ggml/src/ggml-cuda/mmq.cu
+index 7fb440148..ed5025b56 100644
+--- a/ggml/src/ggml-cuda/mmq.cu
++++ b/ggml/src/ggml-cuda/mmq.cu
+@@ -3,8 +3,38 @@
+ #include "quantize.cuh"
+ #include "mmid.cuh"
+ 
++#include <cstdlib>
++#include <cstring>
+ #include <cstdint>
+ 
++#ifndef GGML_CUDA_FORCE_MMQ
++enum class ggml_cuda_mmq_mode {
++    AUTO,
++    FORCE,
++    CUBLAS,
++};
++
++static ggml_cuda_mmq_mode ggml_cuda_get_mmq_mode() {
++    static const ggml_cuda_mmq_mode mode = []() {
++        const char * value = std::getenv("GGML_CUDA_MMQ_MODE");
++        if (value == nullptr || std::strcmp(value, "auto") == 0) {
++            return ggml_cuda_mmq_mode::AUTO;
++        }
++        if (std::strcmp(value, "force") == 0) {
++            GGML_LOG_INFO("GGML_CUDA_MMQ_MODE: forcing MMQ for supported matrix shapes\n");
++            return ggml_cuda_mmq_mode::FORCE;
++        }
++        if (std::strcmp(value, "cublas") == 0) {
++            GGML_LOG_INFO("GGML_CUDA_MMQ_MODE: MMQ disabled; using cuBLAS where applicable\n");
++            return ggml_cuda_mmq_mode::CUBLAS;
++        }
++        GGML_LOG_WARN("GGML_CUDA_MMQ_MODE has invalid value '%s'; using auto\n", value);
++        return ggml_cuda_mmq_mode::AUTO;
++    }();
++    return mode;
++}
++#endif
++
+ static void ggml_cuda_mul_mat_q_switch_type(ggml_backend_cuda_context & ctx, const mmq_args & args, cudaStream_t stream) {
+     switch (args.type_x) {
+         case GGML_TYPE_Q1_0:
+@@ -261,6 +291,13 @@ bool ggml_cuda_should_use_mmq(enum ggml_type type, int cc, int64_t ne11, int64_t
+     return false;
+ #endif // GGML_CUDA_FORCE_CUBLAS
+ 
++#ifndef GGML_CUDA_FORCE_MMQ
++    const ggml_cuda_mmq_mode mode = ggml_cuda_get_mmq_mode();
++    if (mode == ggml_cuda_mmq_mode::CUBLAS) {
++        return false;
++    }
++#endif
++
+     bool mmq_supported;
+ 
+     switch (type) {
+@@ -323,6 +360,12 @@ bool ggml_cuda_should_use_mmq(enum ggml_type type, int cc, int64_t ne11, int64_t
+     return true;
+ #endif //GGML_CUDA_FORCE_MMQ
+ 
++#ifndef GGML_CUDA_FORCE_MMQ
++    if (mode == ggml_cuda_mmq_mode::FORCE) {
++        return true;
++    }
++#endif
++
+     if (GGML_CUDA_CC_IS_NVIDIA(cc)) {
+         return !fp16_mma_hardware_available(cc) || ne11 < MMQ_DP4A_MAX_BATCH_SIZE;
+     }
+diff --git a/tests/test-arg-parser.cpp b/tests/test-arg-parser.cpp
+index e0907631a..54f38242d 100644
+--- a/tests/test-arg-parser.cpp
++++ b/tests/test-arg-parser.cpp
+@@ -249,6 +249,17 @@ static void test(void) {
+     assert(params.n_predict == 6789);
+     assert(params.n_batch == 9090);
+ 
++#ifndef _WIN32
++    unsetenv("GGML_CUDA_MMQ_MODE");
++    argv = {"binary_name", "--cuda-mmq", "force"};
++    assert(true == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_COMMON));
++    assert(std::string(getenv("GGML_CUDA_MMQ_MODE")) == "force");
++
++    argv = {"binary_name", "--cuda-mmq", "invalid"};
++    assert(false == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_COMMON));
++    unsetenv("GGML_CUDA_MMQ_MODE");
++#endif
++
+     // --draft cannot be used outside llama-speculative
+     argv = {"binary_name", "--spec-draft-n-max", "123"};
+     assert(true == common_params_parse(argv.size(), list_str_to_char(argv).data(), params, LLAMA_EXAMPLE_SPECULATIVE));
+-- 
+2.55.0
+

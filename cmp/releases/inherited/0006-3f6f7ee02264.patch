@@ -1,0 +1,529 @@
+From 3f6f7ee022644bf913987f37ca683edbdb6c464e Mon Sep 17 00:00:00 2001
+From: Joseph Stackhouse <joseph.stackhouse@stack-tech.com>
+Date: Sat, 5 Sep 2026 06:01:47 -0400
+Subject: [PATCH] seed prompt graph executables with a capture-only first
+ observation
+
+The prompt path submitted every compatible graph directly from a single host
+thread, and prior attribution placed the large majority of sampled server CPU
+cycles inside driver submission rather than arithmetic. On a narrow link with
+mostly idle cards, that submission cost dominates.
+
+On the first observation of a prompt graph identity this captures and
+instantiates a graph executable but deliberately does not launch it; that same
+observation still executes through the normal direct path. Only later
+observations replay. Prompt graphs use a namespace separate from decode graphs
+and the prompt entries are released at the first batch-one decode graph.
+
+That ordering is the safety property: a mutable first observation is never
+replayed from an unproven executable. Executables are keyed by first node and
+prompt namespace rather than by source address, which fragmented at long
+context.
+
+The measured effect is strongly configuration-dependent. One tested model
+family gained a large multiple of its prompt throughput while another gained a
+few percent, and one showed a small batch-one decode cost. It is not
+represented as a decode gain.
+
+Default-off, selected by GGML_CUDA_PROMPT_GRAPH_CAPTURE_SEED=1. Deterministic
+output is retained.
+---
+ ggml/src/ggml-cuda/common.cuh   |  59 ++++++-
+ ggml/src/ggml-cuda/ggml-cuda.cu | 264 ++++++++++++++++++++++++++++----
+ 2 files changed, 290 insertions(+), 33 deletions(-)
+
+diff --git a/ggml/src/ggml-cuda/common.cuh b/ggml/src/ggml-cuda/common.cuh
+index e6ebeff28..9b48dcb87 100644
+--- a/ggml/src/ggml-cuda/common.cuh
++++ b/ggml/src/ggml-cuda/common.cuh
+@@ -1245,6 +1245,9 @@ struct ggml_cuda_graph {
+     std::vector<cudaGraphNode_t> nodes;
+     bool disable_due_to_gpu_arch = false;
+     bool warmup_complete = false;
++    // last cudaGraphExecUpdate on this executable failed (topology changed);
++    // prompt graphs use this to skip the doomed update attempt next time
++    bool exec_update_failed = false;
+     uint64_t uid = 0;
+     int64_t last_used_time = 0;
+     struct node_properties {
+@@ -1262,6 +1265,23 @@ struct ggml_cuda_graph {
+ #endif
+ };
+ 
++struct ggml_cuda_graph_key {
++    const void * first_node = nullptr;
++    bool         is_prompt  = false;
++
++    bool operator==(const ggml_cuda_graph_key & other) const {
++        return first_node == other.first_node && is_prompt == other.is_prompt;
++    }
++};
++
++struct ggml_cuda_graph_key_hash {
++    size_t operator()(const ggml_cuda_graph_key & key) const {
++        const size_t first = std::hash<const void *>{}(key.first_node);
++        const size_t kind  = std::hash<bool>{}(key.is_prompt);
++        return first ^ (kind + 0x9e3779b9U + (first << 6) + (first >> 2));
++    }
++};
++
+ struct ggml_cuda_concurrent_event {
+     std::vector<cudaEvent_t> join_events;
+     cudaEvent_t              fork_event = nullptr;
+@@ -1429,13 +1449,24 @@ struct ggml_backend_cuda_context {
+     int curr_stream_no = 0;
+ 
+ #ifdef USE_CUDA_GRAPH
+-    // Map from first_node_ptr to cuda_graph - allows multiple graphs per context
+-    // when the computation is split across CPU/GPU (e.g., with --n-cpu-moe)
+-    std::unordered_map<const void *, std::unique_ptr<ggml_cuda_graph>> cuda_graphs;
++    // Map from graph identity to cuda_graph. Prompt execution uses a distinct,
++    // stable namespace so changing input-storage addresses do not fragment the
++    // cache or collide with the normal batch-one decode graph.
++    std::unordered_map<ggml_cuda_graph_key, std::unique_ptr<ggml_cuda_graph>,
++                       ggml_cuda_graph_key_hash> cuda_graphs;
++
++    uint64_t prompt_graph_candidates     = 0;
++    uint64_t prompt_graph_exec_seeds     = 0;
++    uint64_t prompt_graph_exec_updates   = 0;
++    uint64_t prompt_graph_reinstantiates = 0;
++    uint64_t prompt_graph_launches       = 0;
++    uint64_t prompt_graph_direct_seeds   = 0;
++    uint64_t prompt_graph_clears         = 0;
++    bool     prompt_graph_phase_active   = false;
+ 
+     int64_t last_graph_eviction_sweep = 0;
+ 
+-    ggml_cuda_graph * cuda_graph(const void * first_node_ptr) {
++    ggml_cuda_graph * cuda_graph(const ggml_cuda_graph_key & graph_key) {
+         const int64_t time_now = ggml_time_us();
+ 
+         // sweep every 5s, evicting cuda graphs unused for >=10s
+@@ -1450,14 +1481,30 @@ struct ggml_backend_cuda_context {
+             }
+         }
+ 
+-        auto it = cuda_graphs.find(first_node_ptr);
++        auto it = cuda_graphs.find(graph_key);
+         if (it == cuda_graphs.end()) {
+-            it = cuda_graphs.emplace(first_node_ptr, std::make_unique<ggml_cuda_graph>()).first;
++            it = cuda_graphs.emplace(graph_key, std::make_unique<ggml_cuda_graph>()).first;
+         }
+         it->second->last_used_time = time_now;
+         return it->second.get();
+     }
+ 
++    void clear_prompt_cuda_graphs() {
++        bool erased = false;
++        for (auto it = cuda_graphs.begin(); it != cuda_graphs.end(); ) {
++            if (it->first.is_prompt) {
++                it = cuda_graphs.erase(it);
++                erased = true;
++            } else {
++                ++it;
++            }
++        }
++        prompt_graph_phase_active = false;
++        if (erased) {
++            ++prompt_graph_clears;
++        }
++    }
++
+     // Check if any CUDA graph is enabled for this context (used by kernels that need to know
+     // if graphs are in use without having access to the specific graph key)
+     bool any_cuda_graph_enabled() const {
+diff --git a/ggml/src/ggml-cuda/ggml-cuda.cu b/ggml/src/ggml-cuda/ggml-cuda.cu
+index 761a619da..b3840c619 100644
+--- a/ggml/src/ggml-cuda/ggml-cuda.cu
++++ b/ggml/src/ggml-cuda/ggml-cuda.cu
+@@ -1,4 +1,5 @@
+ #include "ggml-cuda.h"
++#include "ggml-research.h"
+ #include "ggml-impl.h"
+ #include "ggml-backend-impl.h"
+ 
+@@ -707,6 +708,26 @@ ggml_backend_cuda_context::~ggml_backend_cuda_context() {
+     std::unique_lock<std::mutex> lock(ggml_cuda_lock);
+     ggml_cuda_lock_cv.wait(lock, []{ return ggml_cuda_lock_counter.load(std::memory_order_relaxed) == 0; });
+ 
++#ifdef USE_CUDA_GRAPH
++    if (prompt_graph_candidates != 0) {
++        std::fprintf(stderr,
++                "ggml_cuda_prompt_graph_summary device=%d candidates=%" PRIu64
++                " ggml_cuda_prompt_graph_exec_seed=%" PRIu64
++                " ggml_cuda_prompt_graph_exec_update=%" PRIu64
++                " reinstantiated=%" PRIu64 " launched=%" PRIu64 " direct_seed=%" PRIu64
++                " cleared=%" PRIu64 "\n",
++                device,
++                prompt_graph_candidates,
++                prompt_graph_exec_seeds,
++                prompt_graph_exec_updates,
++                prompt_graph_reinstantiates,
++                prompt_graph_launches,
++                prompt_graph_direct_seeds,
++                prompt_graph_clears);
++        std::fflush(stderr);
++    }
++#endif
++
+     ggml_cuda_mapped_host_bridge_free(mapped_host_bridge);
+ 
+     if (copy_event != nullptr) {
+@@ -2516,8 +2537,8 @@ struct ggml_cuda_mapped_host_bridge {
+ static std::mutex ggml_cuda_mapped_bridge_init_mutex;
+ 
+ static bool ggml_cuda_mapped_bridge_requested() {
+-    const char * value = std::getenv("GGML_CUDA_MAPPED_HOST_BRIDGE");
+-    return value != nullptr && strcmp(value, "1") == 0;
++    static ggml_research_cached_int selector;
++    return selector.get("GGML_CUDA_MAPPED_HOST_BRIDGE", 0) == 1;
+ }
+ 
+ static void ggml_cuda_mapped_bridge_wait_slot(
+@@ -2880,14 +2901,36 @@ static bool ggml_cuda_graph_check_compability(ggml_cgraph * cgraph) {
+     return use_cuda_graph;
+ }
+ 
+-static const void * ggml_cuda_graph_get_key(ggml_cgraph * cgraph) {
+-    return cgraph->nodes[0];
++static bool ggml_cuda_prompt_graph_capture_seed_enabled() {
++    // runtime research selector: re-read whenever an override changes (see ggml-research.h)
++    static ggml_research_cached_int selector;
++    return selector.get("GGML_CUDA_PROMPT_GRAPH_CAPTURE_SEED", 0) != 0;
+ }
+ 
+-static bool ggml_cuda_graph_update_required(ggml_backend_cuda_context * cuda_ctx, ggml_cgraph * cgraph) {
++static bool ggml_cuda_graph_is_prompt(const ggml_cgraph * cgraph) {
++    for (int i = 0; i < cgraph->n_nodes; ++i) {
++        const ggml_tensor * node = cgraph->nodes[i];
++        if (node->op == GGML_OP_MUL_MAT && node->src[0] != nullptr && node->src[1] != nullptr &&
++                ggml_is_quantized(node->src[0]->type) &&
++                (node->src[1]->ne[1] > 1 || node->ne[1] > 1)) {
++            return true;
++        }
++    }
++    return false;
++}
++
++static ggml_cuda_graph_key ggml_cuda_graph_get_key(ggml_cgraph * cgraph, const bool prompt_graph_capture_seed) {
++    ggml_cuda_graph_key key = { cgraph->nodes[0], false };
++    key.is_prompt = prompt_graph_capture_seed;
++    return key;
++}
++
++static bool ggml_cuda_graph_update_required(
++        ggml_backend_cuda_context * cuda_ctx,
++        ggml_cgraph * cgraph,
++        const ggml_cuda_graph_key & graph_key) {
+     bool res = false;
+ 
+-    const void * graph_key = ggml_cuda_graph_get_key(cgraph);
+     ggml_cuda_graph * graph = cuda_ctx->cuda_graph(graph_key);
+ 
+     if (cgraph->uid != 0 &&
+@@ -2926,17 +2969,38 @@ static bool ggml_cuda_graph_update_required(ggml_backend_cuda_context * cuda_ctx
+     return res;
+ }
+ 
+-static void ggml_cuda_graph_update_executable(ggml_backend_cuda_context * cuda_ctx, const void * graph_key) {
++static void ggml_cuda_graph_update_executable(
++        ggml_backend_cuda_context * cuda_ctx,
++        const ggml_cuda_graph_key & graph_key,
++        const bool prompt_graph_exec_update) {
+     ggml_cuda_graph * graph = cuda_ctx->cuda_graph(graph_key);
++    bool reinstantiated = false;
++
++    // Measured on the CMP prompt path: cudaGraphExecUpdate fails with
++    // topology-changed on every prompt observation after the first, so the
++    // update attempt is pure driver overhead. When enabled, a prompt executable
++    // whose previous update failed is re-instantiated directly.
++    static const bool skip_failed_prompt_update = [] {
++        const char * value = ggml_research_getenv("GGML_CUDA_PROMPT_GRAPH_SKIP_FAILED_UPDATE");
++        return value != nullptr && std::atoi(value) != 0;
++    }();
+ 
++    cudaError_t stat = cudaSuccess;
++    if (prompt_graph_exec_update && skip_failed_prompt_update && graph->exec_update_failed) {
++        stat = cudaErrorGraphExecUpdateFailure;
++    } else {
+ #if CUDART_VERSION >= 12000
+-    cudaGraphExecUpdateResultInfo result_info;
+-    cudaError_t stat = cudaGraphExecUpdate(graph->instance, graph->graph, &result_info);
++        cudaGraphExecUpdateResultInfo result_info;
++        stat = cudaGraphExecUpdate(graph->instance, graph->graph, &result_info);
+ #else
+-    cudaGraphNode_t errorNode;
+-    cudaGraphExecUpdateResult result_info;
+-    cudaError_t stat = cudaGraphExecUpdate(graph->instance, graph->graph, &errorNode, &result_info);
++        cudaGraphNode_t errorNode;
++        cudaGraphExecUpdateResult result_info;
++        stat = cudaGraphExecUpdate(graph->instance, graph->graph, &errorNode, &result_info);
+ #endif // CUDART_VERSION >= 12000
++        if (stat == cudaErrorGraphExecUpdateFailure) {
++            (void)cudaGetLastError();
++        }
++    }
+ 
+     if (stat == cudaErrorGraphExecUpdateFailure) {
+ #ifndef NDEBUG
+@@ -2944,13 +3008,22 @@ static void ggml_cuda_graph_update_executable(ggml_backend_cuda_context * cuda_c
+ #endif
+ 
+         // The pre-existing graph exec cannot be updated due to violated constraints
+-        // so instead clear error and re-instantiate
+-        (void)cudaGetLastError();
++        // so instead re-instantiate
++        graph->exec_update_failed = true;
+         CUDA_CHECK(cudaGraphExecDestroy(graph->instance));
+         graph->instance = nullptr;
+         CUDA_CHECK(cudaGraphInstantiate(&graph->instance, graph->graph, NULL, NULL, 0));
++        reinstantiated = true;
+     } else {
+         GGML_ASSERT(stat == cudaSuccess);
++        graph->exec_update_failed = false;
++    }
++
++    if (prompt_graph_exec_update) {
++        ++cuda_ctx->prompt_graph_exec_updates;
++        if (reinstantiated) {
++            ++cuda_ctx->prompt_graph_reinstantiates;
++        }
+     }
+ }
+ #endif // USE_CUDA_GRAPH
+@@ -4474,7 +4547,15 @@ static int ggml_cuda_try_fuse(ggml_backend_cuda_context * cuda_ctx, ggml_cgraph
+     return 0;
+ }
+ 
+-static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cuda_ctx, ggml_cgraph * cgraph, const bool use_cuda_graph, const bool cuda_graph_update_required, const void * graph_key) {
++static void ggml_cuda_graph_evaluate_and_capture(
++        ggml_backend_cuda_context * cuda_ctx,
++        ggml_cgraph * cgraph,
++        const bool use_cuda_graph,
++        const bool cuda_graph_update_required,
++        const bool launch_cuda_graph,
++        const bool prompt_graph_capture_seed,
++        const bool prompt_graph_exec_update,
++        const ggml_cuda_graph_key & graph_key) {
+     bool graph_evaluated_or_captured = false;
+ 
+     // flag used to determine whether it is an integrated_gpu
+@@ -4677,23 +4758,33 @@ static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cud
+ 
+     if (use_cuda_graph) {
+         ggml_cuda_graph * graph = cuda_ctx->cuda_graph(graph_key);
++        const bool had_instance = graph->instance != nullptr;
+         if (graph->instance == nullptr) { // Create executable graph from captured graph.
+             CUDA_CHECK(cudaGraphInstantiate(&graph->instance, graph->graph, NULL, NULL, 0));
+         }
+-        if (cuda_graph_update_required) { // Update graph executable
+-            ggml_cuda_graph_update_executable(cuda_ctx, graph_key);
++        if (cuda_graph_update_required && had_instance) { // Update an existing graph executable.
++            ggml_cuda_graph_update_executable(cuda_ctx, graph_key, prompt_graph_exec_update);
++        }
++        if (prompt_graph_capture_seed && !had_instance) {
++            ++cuda_ctx->prompt_graph_exec_seeds;
++        }
++        if (launch_cuda_graph) {
++            CUDA_CHECK(cudaGraphLaunch(graph->instance, cuda_ctx->stream()));
+         }
+-        // Launch graph
+-        CUDA_CHECK(cudaGraphLaunch(graph->instance, cuda_ctx->stream()));
+ #else
+         GGML_UNUSED(graph_key);
++        GGML_UNUSED(launch_cuda_graph);
++        GGML_UNUSED(prompt_graph_capture_seed);
++        GGML_UNUSED(prompt_graph_exec_update);
+         graph_evaluated_or_captured = true;
+ #endif  // USE_CUDA_GRAPH
+     }
+ }
+ 
+ #ifdef USE_CUDA_GRAPH
+-static bool ggml_cuda_graph_set_enabled(ggml_backend_cuda_context * cuda_ctx, const void * graph_key) {
++static bool ggml_cuda_graph_set_enabled(
++        ggml_backend_cuda_context * cuda_ctx,
++        const ggml_cuda_graph_key & graph_key) {
+     ggml_cuda_graph * graph = cuda_ctx->cuda_graph(graph_key);
+ 
+     if (graph->graph == nullptr) {
+@@ -4716,10 +4807,24 @@ static enum ggml_status ggml_backend_cuda_graph_compute(ggml_backend_t backend,
+ 
+     bool use_cuda_graph             = false;
+     bool cuda_graph_update_required = false;
+-    const void * graph_key = nullptr;
++    bool prompt_graph_candidate     = false;
++    bool prompt_graph_capture_seed  = false;
++    bool prompt_graph_exec_update   = false;
++    ggml_cuda_graph_key graph_key   = {};
+ 
+ #ifdef USE_CUDA_GRAPH
+-    graph_key = ggml_cuda_graph_get_key(cgraph);
++    prompt_graph_candidate = ggml_cuda_prompt_graph_capture_seed_enabled() &&
++                             ggml_cuda_graph_is_prompt(cgraph);
++    graph_key = ggml_cuda_graph_get_key(cgraph, prompt_graph_candidate);
++
++    if (prompt_graph_candidate) {
++        cuda_ctx->prompt_graph_phase_active = true;
++    } else if (cuda_ctx->prompt_graph_phase_active) {
++        // Prompt graph executables are no longer useful once batch-one decode
++        // begins. Drop them before decode warmup so their driver allocations
++        // cannot perturb the latency-sensitive decode graph cache.
++        cuda_ctx->clear_prompt_cuda_graphs();
++    }
+ 
+     ggml_cuda_graph_set_enabled(cuda_ctx, graph_key);
+ 
+@@ -4727,9 +4832,19 @@ static enum ggml_status ggml_backend_cuda_graph_compute(ggml_backend_t backend,
+     if (graph->is_enabled()) {
+         const bool graph_compatible = ggml_cuda_graph_check_compability(cgraph);
+         if (graph_compatible) {
+-            const bool properties_changed = ggml_cuda_graph_update_required(cuda_ctx, cgraph);
+-
+-            if (!graph->warmup_complete) {
++            const bool properties_changed = ggml_cuda_graph_update_required(cuda_ctx, cgraph, graph_key);
++
++            if (prompt_graph_candidate) {
++                ++cuda_ctx->prompt_graph_candidates;
++                // Every recurring prompt slot receives an executable on its first
++                // observation, but that seed is not launched. The same observation
++                // is executed directly below. Later geometry changes update and
++                // launch the slot-owned executable.
++                use_cuda_graph = true;
++                cuda_graph_update_required = properties_changed || graph->instance == nullptr;
++                prompt_graph_capture_seed = graph->instance == nullptr;
++                prompt_graph_exec_update = properties_changed && graph->instance != nullptr;
++            } else if (!graph->warmup_complete) {
+                 // Warmup: need at least 2 calls with no property change on the 2nd call
+                 if (!properties_changed) {
+                     graph->warmup_complete = true;
+@@ -4763,7 +4878,40 @@ static enum ggml_status ggml_backend_cuda_graph_compute(ggml_backend_t backend,
+         CUDA_CHECK(cudaStreamBeginCapture(cuda_ctx->stream(), cudaStreamCaptureModeRelaxed));
+     }
+ 
+-    ggml_cuda_graph_evaluate_and_capture(cuda_ctx, cgraph, use_cuda_graph, cuda_graph_update_required, graph_key);
++    if (prompt_graph_capture_seed) {
++        ggml_cuda_graph_evaluate_and_capture(
++            cuda_ctx,
++            cgraph,
++            use_cuda_graph,
++            cuda_graph_update_required,
++            false, // launch_cuda_graph
++            true,
++            false,
++            graph_key);
++        ++cuda_ctx->prompt_graph_direct_seeds;
++        ggml_cuda_graph_evaluate_and_capture(
++            cuda_ctx,
++            cgraph,
++            false, // use_cuda_graph
++            false,
++            false,
++            false,
++            false,
++            graph_key);
++    } else {
++        if (prompt_graph_candidate && use_cuda_graph) {
++            ++cuda_ctx->prompt_graph_launches;
++        }
++        ggml_cuda_graph_evaluate_and_capture(
++            cuda_ctx,
++            cgraph,
++            use_cuda_graph,
++            cuda_graph_update_required,
++            true,
++            false,
++            prompt_graph_exec_update,
++            graph_key);
++    }
+ 
+     return GGML_STATUS_SUCCESS;
+ }
+@@ -4819,7 +4967,9 @@ static void ggml_backend_cuda_graph_optimize(ggml_backend_t backend, ggml_cgraph
+     }
+ 
+ #ifdef USE_CUDA_GRAPH
+-    const void * graph_key = ggml_cuda_graph_get_key(cgraph);
++    const bool prompt_graph_candidate = ggml_cuda_prompt_graph_capture_seed_enabled() &&
++                                        ggml_cuda_graph_is_prompt(cgraph);
++    const ggml_cuda_graph_key graph_key = ggml_cuda_graph_get_key(cgraph, prompt_graph_candidate);
+     const bool use_cuda_graph = ggml_cuda_graph_set_enabled(cuda_ctx, graph_key);
+ #else
+     const bool use_cuda_graph = false;
+@@ -5967,6 +6117,63 @@ static ggml_backend_feature * ggml_backend_cuda_get_features(ggml_backend_reg_t
+     GGML_UNUSED(reg);
+ }
+ 
++
++// Device-side expansion of a two-value input row set (causal KQ masks, sparse-attention block
++// biases): row r holds prefix_len[r] leading elements with bit pattern `prefix_bits` followed by
++// elements with `suffix_bits`. Bit patterns are copied verbatim, so the result is identical to the
++// host constructor's tensor. T is uint16_t (F16) or uint32_t (F32); two elements per store.
++template <typename T>
++static __global__ void ggml_cuda_expand_input_mask_kernel(T * __restrict__ dst, const int32_t * __restrict__ prefix_len,
++                                                          const int64_t n_rows, const int64_t n_cols,
++                                                          const uint32_t prefix_bits, const uint32_t suffix_bits) {
++    const int64_t row = blockIdx.y;
++    if (row >= n_rows) {
++        return;
++    }
++    const int32_t prefix = prefix_len[row];
++    const T a = (T) prefix_bits;
++    const T b = (T) suffix_bits;
++    T * dst_row = dst + row*n_cols;
++    for (int64_t c = 2*((int64_t) blockIdx.x*blockDim.x + threadIdx.x); c < n_cols; c += 2*(int64_t) gridDim.x*blockDim.x) {
++        // n_cols is even, so both lanes are in range
++        dst_row[c]     = c     < prefix ? a : b;
++        dst_row[c + 1] = c + 1 < prefix ? a : b;
++    }
++}
++
++static bool ggml_backend_cuda_expand_input_mask(ggml_backend_t backend, ggml_tensor * dst, const int32_t * prefix_len, int64_t n_rows, int64_t n_cols,
++                                                uint32_t prefix_bits, uint32_t suffix_bits) {
++    if (!ggml_backend_is_cuda(backend) || (dst->type != GGML_TYPE_F16 && dst->type != GGML_TYPE_F32) || !ggml_is_contiguous(dst) ||
++            dst->ne[0] != n_cols || dst->ne[1] != n_rows || dst->ne[2] != 1 || dst->ne[3] != 1 || n_cols % 2 != 0 || n_rows <= 0) {
++        return false;
++    }
++    ggml_backend_buffer_t buf = dst->view_src ? dst->view_src->buffer : dst->buffer;
++    if (buf == nullptr || !ggml_backend_buffer_is_cuda(buf)) {
++        return false;
++    }
++    ggml_backend_cuda_context * cuda_ctx = (ggml_backend_cuda_context *) backend->context;
++    ggml_backend_cuda_buffer_context * buf_ctx = (ggml_backend_cuda_buffer_context *) buf->context;
++    if (cuda_ctx->device != buf_ctx->device) {
++        return false;
++    }
++    ggml_cuda_set_device(cuda_ctx->device);
++    cudaStream_t stream = cuda_ctx->stream();
++
++    ggml_cuda_pool_alloc<int32_t> prefix_dev(cuda_ctx->pool(), (size_t) n_rows);
++    CUDA_CHECK(cudaMemcpyAsync(prefix_dev.get(), prefix_len, n_rows*sizeof(int32_t), cudaMemcpyHostToDevice, stream));
++
++    const int block = 256;
++    const int grid_x = (int) std::min<int64_t>((n_cols/2 + block - 1)/block, 1024);
++    const dim3 grid(grid_x, (unsigned) n_rows, 1);
++    if (dst->type == GGML_TYPE_F16) {
++        ggml_cuda_expand_input_mask_kernel<uint16_t><<<grid, block, 0, stream>>>((uint16_t *) dst->data, prefix_dev.get(), n_rows, n_cols, prefix_bits, suffix_bits);
++    } else {
++        ggml_cuda_expand_input_mask_kernel<uint32_t><<<grid, block, 0, stream>>>((uint32_t *) dst->data, prefix_dev.get(), n_rows, n_cols, prefix_bits, suffix_bits);
++    }
++    CUDA_CHECK(cudaGetLastError());
++    return true;
++}
++
+ static void * ggml_backend_cuda_reg_get_proc_address(ggml_backend_reg_t reg, const char * name) {
+     GGML_UNUSED(reg);
+     if (strcmp(name, "ggml_backend_comm_init") == 0) {
+@@ -5987,6 +6194,9 @@ static void * ggml_backend_cuda_reg_get_proc_address(ggml_backend_reg_t reg, con
+     if (strcmp(name, "ggml_backend_get_features") == 0) {
+         return (void *)ggml_backend_cuda_get_features;
+     }
++    if (strcmp(name, "ggml_backend_expand_input_mask") == 0) {
++        return (void *)ggml_backend_cuda_expand_input_mask;
++    }
+     return nullptr;
+ }
+ 
+-- 
+2.55.0
+

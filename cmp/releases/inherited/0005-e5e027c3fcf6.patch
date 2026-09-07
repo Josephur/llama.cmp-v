@@ -1,0 +1,549 @@
+From e5e027c3fcf638749a39438e4d4e7c9e93a994ee Mon Sep 17 00:00:00 2001
+From: Joseph Stackhouse <joseph.stackhouse@stack-tech.com>
+Date: Sat, 5 Sep 2026 06:01:47 -0400
+Subject: [PATCH] add a runtime research selector registry with activation
+ reporting
+
+Research selectors were plain environment variables read once at process start.
+That had two consequences. A selector could not be toggled between requests on
+an already-loaded model, so comparing two variants meant reloading. Worse, a
+selector whose implementation was later removed became completely silent:
+nothing reads an unknown environment variable, so nothing complains, and
+same-package A/B testing cannot detect it either because both arms are missing
+the same code.
+
+This adds a small additive registry, one header and one source file with no
+dependency on the rest of ggml, that records every selector read and exposes
+the report. A selector that a deployment sets but that no surviving code reads
+becomes detectable instead of invisible.
+
+The registry changes no behaviour on its own. It is infrastructure the later
+patches read through, and a caching accessor keeps hot paths off the lock.
+---
+ ggml/include/ggml-research.h    |  77 +++++++++++++++++++++
+ ggml/src/CMakeLists.txt         |   2 +
+ ggml/src/ggml-cuda/mmq.cu       |   3 +-
+ ggml/src/ggml-research.cpp      | 117 ++++++++++++++++++++++++++++++++
+ src/llama-model-loader.cpp      |   2 +
+ src/llama-model-loader.h        |   1 +
+ src/llama-model.cpp             |  22 ++++--
+ tools/server/server-context.cpp |  46 +++++++++++++
+ tools/server/server-context.h   |   2 +
+ tools/server/server-task.cpp    |  60 ++++++++++++++++
+ tools/server/server.cpp         |   2 +
+ 11 files changed, 326 insertions(+), 8 deletions(-)
+ create mode 100644 ggml/include/ggml-research.h
+ create mode 100644 ggml/src/ggml-research.cpp
+
+diff --git a/ggml/include/ggml-research.h b/ggml/include/ggml-research.h
+new file mode 100644
+index 000000000..289d07740
+--- /dev/null
++++ b/ggml/include/ggml-research.h
+@@ -0,0 +1,77 @@
++#pragma once
++
++// Runtime research selectors.
++//
++// Research-only feature switches in this fork are environment variables read once at
++// process start. To A/B variants on one loaded model, a selector may instead be read through
++// ggml_research_getenv(): it returns a runtime override when one was set with
++// ggml_research_set(), and the process environment otherwise. Callers must not cache the
++// result across graph computes when they want to be switchable.
++//
++// Deliberately tiny and self-contained (one header, one source file, no dependency on the
++// rest of ggml) so it survives upstream llama.cpp updates as an additive file.
++
++#include <stdint.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++// returns the override for `name` if set, else getenv(name); NULL when neither exists.
++// the returned pointer stays valid until the next ggml_research_set() for that name.
++const char * ggml_research_getenv(const char * name);
++
++// integer convenience: atoi() of ggml_research_getenv(name), or `def` when unset
++int ggml_research_getenv_int(const char * name, int def);
++
++// set (value != NULL) or clear (value == NULL) a runtime override
++void ggml_research_set(const char * name, const char * value);
++
++// monotonically increasing counter, bumped by every ggml_research_set(); callers that cache
++// a selector value can compare this to decide when to re-read
++uint64_t ggml_research_generation(void);
++
++// Activation reporting.
++//
++// Every selector read through this header is recorded. A selector that a deployment sets but
++// that no surviving code reads is invisible otherwise: an unknown environment variable is
++// silent, and same-package A/B testing cannot see code missing from both arms. This is how the
++// PINNED_SNAPSHOT / MAPPED_HOST_PREFILL / SSM_CONV_STATE_FUSION family stayed "enabled" in the
++// systemd unit for three weeks after a re-base dropped it (2026-09-04).
++//
++// Returns a JSON object as a NUL-terminated string owned by the library:
++//   {"read":[{"name":..,"value":..,"present":0|1,"reads":N}, ...]}
++// `present` is whether a value existed at first read (override or environment).
++// The caller must not free it; it stays valid until the next call.
++const char * ggml_research_activation_report(void);
++
++// 1 when `name` has been read at least once through this header, else 0.
++int ggml_research_was_read(const char * name);
++
++#ifdef __cplusplus
++}
++
++#include <atomic>
++
++// Thread-safe cached selector read. Selector values are stable for the life of a
++// generation, so hot paths must not pay the registry lock on every call: cache the
++// value and re-read only when ggml_research_set() bumps the generation.
++//
++//   static ggml_research_cached_int sel;
++//   if (sel.get("GGML_CUDA_SOMETHING", 0)) { ... }
++struct ggml_research_cached_int {
++    std::atomic<uint64_t> gen{UINT64_MAX};
++    std::atomic<int>      val{0};
++
++    int get(const char * name, int def) {
++        const uint64_t g = ggml_research_generation();
++        if (gen.load(std::memory_order_acquire) != g) {
++            const int v = ggml_research_getenv_int(name, def);
++            val.store(v, std::memory_order_relaxed);
++            gen.store(g, std::memory_order_release);
++            return v;
++        }
++        return val.load(std::memory_order_relaxed);
++    }
++};
++#endif
+diff --git a/ggml/src/CMakeLists.txt b/ggml/src/CMakeLists.txt
+index 947732000..51566a6a0 100644
+--- a/ggml/src/CMakeLists.txt
++++ b/ggml/src/CMakeLists.txt
+@@ -195,6 +195,7 @@ add_library(ggml-base
+             ../include/ggml-backend.h
+             ../include/ggml-cpp.h
+             ../include/ggml-opt.h
++            ../include/ggml-research.h
+             ../include/gguf.h
+             ggml.c
+             ggml.cpp
+@@ -202,6 +203,7 @@ add_library(ggml-base
+             ggml-backend.cpp
+             ggml-backend-meta.cpp
+             ggml-opt.cpp
++            ggml-research.cpp
+             ggml-threading.cpp
+             ggml-threading.h
+             ggml-quants.c
+diff --git a/ggml/src/ggml-cuda/mmq.cu b/ggml/src/ggml-cuda/mmq.cu
+index ed5025b56..0f5a44219 100644
+--- a/ggml/src/ggml-cuda/mmq.cu
++++ b/ggml/src/ggml-cuda/mmq.cu
+@@ -1,5 +1,6 @@
+ #include "common.cuh"
+ #include "mmq.cuh"
++#include "ggml-research.h"
+ #include "quantize.cuh"
+ #include "mmid.cuh"
+ 
+@@ -16,7 +17,7 @@ enum class ggml_cuda_mmq_mode {
+ 
+ static ggml_cuda_mmq_mode ggml_cuda_get_mmq_mode() {
+     static const ggml_cuda_mmq_mode mode = []() {
+-        const char * value = std::getenv("GGML_CUDA_MMQ_MODE");
++        const char * value = ggml_research_getenv("GGML_CUDA_MMQ_MODE");
+         if (value == nullptr || std::strcmp(value, "auto") == 0) {
+             return ggml_cuda_mmq_mode::AUTO;
+         }
+diff --git a/ggml/src/ggml-research.cpp b/ggml/src/ggml-research.cpp
+new file mode 100644
+index 000000000..393a88c5e
+--- /dev/null
++++ b/ggml/src/ggml-research.cpp
+@@ -0,0 +1,117 @@
++#include "ggml-research.h"
++
++#include <atomic>
++#include <cstdlib>
++#include <map>
++#include <mutex>
++#include <string>
++
++namespace {
++struct research_read {
++    std::string value;
++    bool        present = false;
++    uint64_t    reads   = 0;
++};
++std::mutex &                        research_mutex()    { static std::mutex m; return m; }
++std::map<std::string, std::string> & research_overrides() { static std::map<std::string, std::string> m; return m; }
++std::map<std::string, research_read> & research_reads()   { static std::map<std::string, research_read> m; return m; }
++std::atomic<uint64_t>               research_gen{0};
++
++void research_note_read(const char * name, const char * value) {
++    std::lock_guard<std::mutex> lock(research_mutex());
++    research_read & r = research_reads()[name];
++    r.present = value != nullptr;
++    r.value   = value != nullptr ? value : "";
++    r.reads  += 1;
++}
++
++void research_json_escape(std::string & out, const std::string & in) {
++    for (const char c : in) {
++        switch (c) {
++            case '"':  out += "\\\""; break;
++            case '\\': out += "\\\\"; break;
++            case '\n': out += "\\n";  break;
++            case '\r': out += "\\r";  break;
++            case '\t': out += "\\t";  break;
++            default:
++                if ((unsigned char) c < 0x20) { out += ' '; } else { out += c; }
++        }
++    }
++}
++}
++
++const char * ggml_research_getenv(const char * name) {
++    if (name == nullptr) {
++        return nullptr;
++    }
++    const char * result = nullptr;
++    {
++        std::lock_guard<std::mutex> lock(research_mutex());
++        auto & overrides = research_overrides();
++        auto it = overrides.find(name);
++        if (it != overrides.end()) {
++            result = it->second.c_str();
++        }
++    }
++    if (result == nullptr) {
++        result = std::getenv(name);
++    }
++    research_note_read(name, result);
++    return result;
++}
++
++const char * ggml_research_activation_report(void) {
++    static std::string report;
++    std::string out = "{\"read\":[";
++    {
++        std::lock_guard<std::mutex> lock(research_mutex());
++        bool first = true;
++        for (const auto & [name, r] : research_reads()) {
++            if (!first) { out += ","; }
++            first = false;
++            out += "{\"name\":\"";
++            research_json_escape(out, name);
++            out += "\",\"value\":\"";
++            research_json_escape(out, r.value);
++            out += "\",\"present\":";
++            out += r.present ? "1" : "0";
++            out += ",\"reads\":";
++            out += std::to_string(r.reads);
++            out += "}";
++        }
++    }
++    out += "]}";
++    report = std::move(out);
++    return report.c_str();
++}
++
++int ggml_research_was_read(const char * name) {
++    if (name == nullptr) {
++        return 0;
++    }
++    std::lock_guard<std::mutex> lock(research_mutex());
++    return research_reads().count(name) ? 1 : 0;
++}
++
++int ggml_research_getenv_int(const char * name, int def) {
++    const char * value = ggml_research_getenv(name);
++    return value != nullptr ? std::atoi(value) : def;
++}
++
++void ggml_research_set(const char * name, const char * value) {
++    if (name == nullptr) {
++        return;
++    }
++    std::lock_guard<std::mutex> lock(research_mutex());
++    auto & overrides = research_overrides();
++    if (value == nullptr) {
++        overrides.erase(name);
++    } else {
++        overrides[name] = value;
++    }
++    research_gen.fetch_add(1, std::memory_order_relaxed);
++}
++
++uint64_t ggml_research_generation(void) {
++    return research_gen.load(std::memory_order_relaxed);
++}
+diff --git a/src/llama-model-loader.cpp b/src/llama-model-loader.cpp
+index 4581893ad..d55d3098a 100644
+--- a/src/llama-model-loader.cpp
++++ b/src/llama-model-loader.cpp
+@@ -11,6 +11,7 @@
+ #include <cinttypes>
+ #include <cstdint>
+ #include <cstring>
++#include <mutex>
+ #include <future>
+ #include <regex>
+ 
+@@ -1664,6 +1665,7 @@ bool llama_model_loader::load_all_data(
+                     lmlock->grow_to(weight->offs + n_size);
+                 }
+ 
++                std::lock_guard<std::mutex> lock(mmaps_used_mutex);
+                 auto & mmap_used = mmaps_used[weight->idx];
+                 mmap_used.first  = std::min(mmap_used.first,  weight->offs);
+                 mmap_used.second = std::max(mmap_used.second, weight->offs + n_size);
+diff --git a/src/llama-model-loader.h b/src/llama-model-loader.h
+index 451ceb8a5..3e740a48d 100644
+--- a/src/llama-model-loader.h
++++ b/src/llama-model-loader.h
+@@ -144,6 +144,7 @@ struct llama_model_loader {
+     std::atomic<bool> load_finalized{false};
+     std::mutex load_progress_mutex;
+     std::vector<std::pair<size_t, size_t>> mmaps_used;
++    std::mutex mmaps_used_mutex; // parallel per-backend loads under mmap
+ 
+     // define a comparator for the buft -> ctx map to ensure that the order is well-defined:
+     struct ggml_backend_buft_comparator {
+diff --git a/src/llama-model.cpp b/src/llama-model.cpp
+index a24e05be9..6d852a374 100644
+--- a/src/llama-model.cpp
++++ b/src/llama-model.cpp
+@@ -1,4 +1,5 @@
+ #include "llama-model.h"
++#include "ggml-research.h"
+ 
+ #include "llama-arch.h"
+ #include "llama-ext.h"
+@@ -1818,16 +1819,21 @@ bool llama_model_base::load_tensors(llama_model_loader & ml) {
+ 
+     // Load tensor data. This path is opt-in because positional reads and one
+     // upload worker per GPU are beneficial only on suitable storage/topologies.
+-    const char * parallel_env = std::getenv("LLAMA_MODEL_LOAD_PARALLEL");
++    const char * parallel_env = ggml_research_getenv("LLAMA_MODEL_LOAD_PARALLEL");
+     const bool parallel_requested = parallel_env != nullptr && std::strcmp(parallel_env, "1") == 0;
+-    const bool parallel_eligible = !ml.use_mmap && !ml.use_direct_io && !ml.check_tensors;
++    // mmap is eligible too: GPU contexts copy straight out of the read-only mapping and never
++    // touch a shared file cursor, so only direct-io and tensor validation stay serial.
++    const bool parallel_eligible = !ml.use_direct_io && !ml.check_tensors;
+ 
+     std::vector<size_t> host_loads;
+     std::vector<size_t> gpu_loads;
+     for (size_t i = 0; i < ctx_buf_maps.size(); ++i) {
+         ggml_tensor * first = ggml_get_first_tensor(ctx_buf_maps[i].first);
+-        GGML_ASSERT(first != nullptr && first->buffer != nullptr);
+-        if (ggml_backend_buffer_is_host(first->buffer)) {
++        GGML_ASSERT(first != nullptr);
++        // Under mmap the host-side (CPU/host buffer type) contexts are not
++        // allocated yet: their tensors point into the mapping and receive a
++        // buffer inside load_all_data. Those contexts are always host loads.
++        if (first->buffer == nullptr || ggml_backend_buffer_is_host(first->buffer)) {
+             host_loads.push_back(i);
+         } else {
+             gpu_loads.push_back(i);
+@@ -1844,18 +1850,20 @@ bool llama_model_base::load_tensors(llama_model_loader & ml) {
+ 
+     if (parallel_load) {
+         // Host tensors are loaded first. GPU contexts then use positional reads
+-        // so independent backend uploads can overlap without sharing file offsets.
++        // (or the shared mapping under mmap) so independent backend uploads can
++        // overlap without sharing file offsets.
+         for (size_t i : host_loads) {
+             if (!load_one(i, false)) {
+                 return false;
+             }
+         }
+ 
++        const bool positional = !ml.use_mmap;
+         std::vector<std::future<bool>> futures;
+         futures.reserve(gpu_loads.size());
+         for (size_t i : gpu_loads) {
+-            futures.emplace_back(std::async(std::launch::async, [&, i] {
+-                return load_one(i, true);
++            futures.emplace_back(std::async(std::launch::async, [&, i, positional] {
++                return load_one(i, positional);
+             }));
+         }
+ 
+diff --git a/tools/server/server-context.cpp b/tools/server/server-context.cpp
+index f78cfb36d..0f707f00a 100644
+--- a/tools/server/server-context.cpp
++++ b/tools/server/server-context.cpp
+@@ -1,4 +1,6 @@
+ #include "server-context.h"
++
++#include "ggml-research.h"
+ #include "server-chat.h"
+ #include "server-common.h"
+ #include "server-http.h"
+@@ -4931,6 +4933,50 @@ void server_routes::init_routes() {
+         return handle_count_tokens(ctx_server.vocab, ctx_server.mctx, ctx_server.init_opt, req, TASK_RESPONSE_TYPE_OAI_CHAT);
+     };
+ 
++    // Always available, including in production: report which research selectors this binary
++    // actually read. A selector a deployment sets but that no surviving code reads is otherwise
++    // invisible, which is how a dropped optimization family stayed "enabled" in a systemd unit
++    // for three weeks (see docs/findings/2026-09-04-lost-optimizations-after-upstream-port.md).
++    this->get_research_selectors = [this](const server_http_req & req) {
++        auto res = create_response();
++        (void) req;
++        res->ok(json::parse(ggml_research_activation_report()));
++        return res;
++    };
++
++    // Research-only: set or clear runtime selector overrides on the loaded server so variants can be
++    // A/B tested without reloading the model. Enabled by LLAMA_SERVER_RESEARCH_SELECTORS=1.
++    // Body: {"set": {"NAME": "value", ...}, "clear": ["NAME", ...]} -> {"generation": n, "overrides": {...}}
++    this->post_research_selectors = [this](const server_http_req & req) {
++        auto res = create_response();
++        static const bool enabled = [] {
++            const char * value = ggml_research_getenv("LLAMA_SERVER_RESEARCH_SELECTORS");
++            return value != nullptr && strcmp(value, "1") == 0;
++        }();
++        if (!enabled) {
++            res->error(format_error_response("research selectors are disabled (LLAMA_SERVER_RESEARCH_SELECTORS=1)", ERROR_TYPE_NOT_SUPPORTED));
++            return res;
++        }
++        const json body = json::parse(req.body);
++        json applied = json::object();
++        // clear first so a variant can re-set a name the previous variant used
++        if (body.contains("clear") && body.at("clear").is_array()) {
++            for (const auto & name : body.at("clear")) {
++                ggml_research_set(name.get<std::string>().c_str(), nullptr);
++                applied[name.get<std::string>()] = nullptr;
++            }
++        }
++        if (body.contains("set") && body.at("set").is_object()) {
++            for (const auto & kv : body.at("set").items()) {
++                const std::string value = kv.value().is_string() ? kv.value().get<std::string>() : kv.value().dump();
++                ggml_research_set(kv.key().c_str(), value.c_str());
++                applied[kv.key()] = value;
++            }
++        }
++        res->ok(json{{"generation", ggml_research_generation()}, {"overrides", applied}});
++        return res;
++    };
++
+     this->post_control = [this](const server_http_req & req) {
+         auto res = create_response();
+         const json body = json::parse(req.body);
+diff --git a/tools/server/server-context.h b/tools/server/server-context.h
+index 0acbbffa9..a300cd62a 100644
+--- a/tools/server/server-context.h
++++ b/tools/server/server-context.h
+@@ -140,6 +140,8 @@ struct server_routes {
+     server_http_context::handler_t post_chat_completions;
+     server_http_context::handler_t post_chat_completions_tok;
+     server_http_context::handler_t post_control;
++    server_http_context::handler_t post_research_selectors; // research-only runtime selector overrides
++    server_http_context::handler_t get_research_selectors;  // always-on selector activation report
+     server_http_context::handler_t post_responses_oai;
+     server_http_context::handler_t post_responses_tok_oai;
+     server_http_context::handler_t post_transcriptions_oai;
+diff --git a/tools/server/server-task.cpp b/tools/server/server-task.cpp
+index 0d3beb313..1a3115b4f 100644
+--- a/tools/server/server-task.cpp
++++ b/tools/server/server-task.cpp
+@@ -1,4 +1,8 @@
+ #include "server-task.h"
++#include "ggml-research.h"
++
++#include <cstdio>
++#include <cstdlib>
+ 
+ #include "build-info.h"
+ #include "server-chat.h"
+@@ -1688,6 +1692,40 @@ json server_task_result_apply_lora::to_json() {
+ //
+ // server_prompt_cache
+ //
++// MemAvailable of the host in bytes, or 0 when unknown (non-Linux)
++static size_t server_host_available_bytes() {
++#ifdef __linux__
++    FILE * f = fopen("/proc/meminfo", "r");
++    if (f == nullptr) {
++        return 0;
++    }
++    size_t res = 0;
++    char line[256];
++    while (fgets(line, sizeof(line), f) != nullptr) {
++        unsigned long long kib = 0;
++        if (sscanf(line, "MemAvailable: %llu kB", &kib) == 1) {
++            res = (size_t) kib * 1024ull;
++            break;
++        }
++    }
++    fclose(f);
++    return res;
++#else
++    return 0;
++#endif
++}
++
++// host memory that must stay available after saving a prompt cache entry
++// (default 1 GiB, override with LLAMA_SERVER_CACHE_HOST_RESERVE_MIB)
++static size_t server_host_reserve_bytes() {
++    static const size_t reserve = [] {
++        const char * env = ggml_research_getenv("LLAMA_SERVER_CACHE_HOST_RESERVE_MIB");
++        const long long mib = env != nullptr ? atoll(env) : 1024;
++        return (size_t) (mib < 0 ? 0 : mib) * 1024ull * 1024ull;
++    }();
++    return reserve;
++}
++
+ size_t server_prompt_cache::size() const {
+     size_t res = 0;
+ 
+@@ -1734,6 +1772,28 @@ server_prompt_cache_state * server_prompt_cache::alloc(const server_prompt & pro
+         return nullptr;
+     }
+ 
++    // never let the cache push the host into swap/OOM: the size limit alone is not
++    // a safe bound when the model already keeps large host-resident tensors
++    // (e.g. a 26.8 GiB per-layer embedding table under --load-mode none).
++    {
++        size_t avail = server_host_available_bytes();
++        if (avail > 0) {
++            const size_t reserve = server_host_reserve_bytes();
++            while (!states.empty() && state_size_new + reserve > avail) {
++                const size_t freed = states.front().size();
++                SRV_WRN(" - host memory low (available = %.3f MiB, reserve = %.3f MiB), removing oldest prompt cache entry (size = %.3f MiB)\n",
++                        avail / (1024.0 * 1024.0), reserve / (1024.0 * 1024.0), freed / (1024.0 * 1024.0));
++                states.pop_front();
++                avail += freed;
++            }
++            if (state_size_new + reserve > avail) {
++                SRV_WRN(" - prompt state size %.3f MiB does not fit in available host memory %.3f MiB (reserve %.3f MiB), skipping\n",
++                        state_size_new / (1024.0 * 1024.0), avail / (1024.0 * 1024.0), reserve / (1024.0 * 1024.0));
++                return nullptr;
++            }
++        }
++    }
++
+     // remove any cached prompts that are fully contained in the current prompt
+     for (auto it = states.begin(); it != states.end();) {
+         const int len = it->prompt.tokens.get_common_prefix(prompt.tokens);
+diff --git a/tools/server/server.cpp b/tools/server/server.cpp
+index 22378b38c..7aafd4fae 100644
+--- a/tools/server/server.cpp
++++ b/tools/server/server.cpp
+@@ -255,6 +255,8 @@ int llama_server(common_params & params, int argc, char ** argv) {
+     ctx_http.post("/v1/completions",           ex_wrapper(routes.post_completions_oai));
+     ctx_http.post("/chat/completions",         ex_wrapper(routes.post_chat_completions));
+     ctx_http.post("/v1/chat/completions",      ex_wrapper(routes.post_chat_completions));
++    ctx_http.get ("/research/selectors",         ex_wrapper(routes.get_research_selectors));
++    ctx_http.post("/research/selectors",         ex_wrapper(routes.post_research_selectors));
+     ctx_http.post("/v1/chat/completions/control", ex_wrapper(routes.post_control));
+     ctx_http.post("/v1/responses",             ex_wrapper(routes.post_responses_oai));
+     ctx_http.post("/responses",                ex_wrapper(routes.post_responses_oai));
+-- 
+2.55.0
+

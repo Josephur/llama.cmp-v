@@ -1,0 +1,34 @@
+diff --git a/ggml/src/ggml-cuda/fattn-mma-f16.cuh b/ggml/src/ggml-cuda/fattn-mma-f16.cuh
+index 126a4c4529b90c6dac387d1c17949829b7a1db2a..48f1bba178d6d59148c4e8052848dabacd8da52a 100644
+--- a/ggml/src/ggml-cuda/fattn-mma-f16.cuh
++++ b/ggml/src/ggml-cuda/fattn-mma-f16.cuh
+@@ -111,6 +111,8 @@ static constexpr __host__ __device__ fattn_mma_config ggml_cuda_fattn_mma_get_co
+ }
+ 
+ static constexpr __host__ __device__ fattn_mma_config ggml_cuda_fattn_mma_get_config_volta(const int DKQ, const int DV, const int ncols) {
++    GGML_CUDA_FATTN_MMA_CONFIG_CASE(256, 256, 64, 128, 2,  32, 128, 128, 128, 2, false);
++
+     GGML_CUDA_FATTN_MMA_CONFIG_CASE(512, 512,  8,  64, 4,  32, 256, 256,  64, 1, false);
+     GGML_CUDA_FATTN_MMA_CONFIG_CASE(512, 512, 16,  64, 4,  32, 256, 256,  64, 1, false);
+     GGML_CUDA_FATTN_MMA_CONFIG_CASE(512, 512, 32, 128, 2,  32, 128, 128,  64, 1, false);
+@@ -948,11 +950,17 @@ static __device__ __forceinline__ void flash_attn_ext_f16_iter(
+ #else // Volta
+         const half2 KQ_max_scale_h2 = make_half2(
+             KQ_max_scale[(threadIdx.x / 2) % 2], KQ_max_scale[(threadIdx.x / 2) % 2]);
++        bool skip_rescale = false;
++        if constexpr (DKQ == 256 && DV == 256 && ncols == 64) {
++            skip_rescale = warp_reduce_all(KQ_max_scale[(threadIdx.x / 2) % 2] == 1.0f);
++        }
++        if (!skip_rescale) {
+ #pragma unroll
+-        for (int i = 0; i < (DV/2)/T_C_VKQ::J; ++i) {
++            for (int i = 0; i < (DV/2)/T_C_VKQ::J; ++i) {
+ #pragma unroll
+-            for (int l = 0; l < T_C_VKQ::ne; ++l) {
+-                VKQ_C[i].x[l] *= KQ_max_scale_h2;
++                for (int l = 0; l < T_C_VKQ::ne; ++l) {
++                    VKQ_C[i].x[l] *= KQ_max_scale_h2;
++                }
+             }
+         }
+ #endif // defined(TURING_MMA_AVAILABLE)

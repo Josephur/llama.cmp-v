@@ -1,0 +1,511 @@
+From f9859b80a39c5a133612363538f8a343d7f4a447 Mon Sep 17 00:00:00 2001
+From: Joseph Stackhouse <joseph.stackhouse@stack-tech.com>
+Date: Sat, 5 Sep 2026 06:01:47 -0400
+Subject: [PATCH] bridge no-P2P CUDA boundaries through mapped pinned staging
+
+These cards expose no peer-to-peer path, so every cross-card boundary stages
+through host memory over a Gen1 x1 link. This makes that staging explicit:
+scheduler-visible CUDA ownership plus a fixed four-slot mapped pinned bridge
+for boundaries up to 64 MiB, with event-ordered slot reuse so a slot is never
+rewritten while a consumer is still reading it.
+
+Lossless by construction: it changes where bytes are staged, not what they
+contain. Deterministic output is retained.
+
+Default-off, selected by GGML_CUDA_MAPPED_HOST_BRIDGE=1.
+---
+ ggml/src/ggml-backend.cpp       |  83 ++++++++-
+ ggml/src/ggml-cuda/common.cuh   |   3 +
+ ggml/src/ggml-cuda/ggml-cuda.cu | 297 ++++++++++++++++++++++++++++++++
+ 3 files changed, 381 insertions(+), 2 deletions(-)
+
+diff --git a/ggml/src/ggml-backend.cpp b/ggml/src/ggml-backend.cpp
+index 6862128e6..6a5ebf747 100644
+--- a/ggml/src/ggml-backend.cpp
++++ b/ggml/src/ggml-backend.cpp
+@@ -876,6 +876,11 @@ static void ggml_backend_sched_graph_inputs_grow(ggml_backend_sched_t sched) {
+ }
+ 
+ // returns the priority of the backend, lower id is higher priority
++static bool ggml_backend_sched_cuda_bridge_requested() {
++    const char * value = getenv("GGML_CUDA_MAPPED_HOST_BRIDGE");
++    return value != NULL && strcmp(value, "1") == 0;
++}
++
+ static int ggml_backend_sched_backend_id(ggml_backend_sched_t sched, ggml_backend_t backend) {
+     for (int i = 0; i < sched->n_backends; i++) {
+         if (sched->backends[i] == backend) {
+@@ -891,6 +896,22 @@ static int ggml_backend_sched_backend_from_buffer(ggml_backend_sched_t sched, co
+         return -1;
+     }
+ 
++    // CUDA backends may report support for allocations owned by another CUDA
++    // device. In bridge mode, preserve the allocation's owning device so the
++    // scheduler exposes the real cross-device activation boundary.
++    if (ggml_backend_sched_cuda_bridge_requested()) {
++        ggml_backend_dev_t owner_device = ggml_backend_buft_get_device(buffer->buft);
++        for (int i = 0; owner_device != NULL && i < sched->n_backends; ++i) {
++            ggml_backend_t backend = sched->backends[i];
++            const char * name = ggml_backend_name(backend);
++            if (ggml_backend_get_device(backend) == owner_device &&
++                name != NULL && strncmp(name, "CUDA", 4) == 0 &&
++                ggml_backend_supports_op(backend, op)) {
++                return i;
++            }
++        }
++    }
++
+     // find highest prio backend that supports the buffer type and the op
+     for (int i = 0; i < sched->n_backends; i++) {
+         if (ggml_backend_supports_buft(sched->backends[i], buffer->buft) &&
+@@ -907,6 +928,31 @@ static int ggml_backend_sched_backend_from_buffer(ggml_backend_sched_t sched, co
+     return -1;
+ }
+ 
++static int ggml_backend_sched_cuda_owner_from_static_source(
++        ggml_backend_sched_t sched,
++        const struct ggml_tensor * op) {
++    if (!ggml_backend_sched_cuda_bridge_requested() || op == NULL) {
++        return -1;
++    }
++
++    for (int i = 0; i < GGML_MAX_SRC; ++i) {
++        const struct ggml_tensor * src = op->src[i];
++        if (src == NULL) {
++            continue;
++        }
++        while (src->view_src != NULL) {
++            src = src->view_src;
++        }
++        if (src->op == GGML_OP_NONE && src->buffer != NULL) {
++            const int owner = ggml_backend_sched_backend_from_buffer(sched, src, op);
++            if (owner != -1) {
++                return owner;
++            }
++        }
++    }
++    return -1;
++}
++
+ #if 0
+ #define GGML_SCHED_MAX_SPLITS_DEBUG 4096
+ static char causes[GGML_DEFAULT_GRAPH_SIZE*16 + GGML_SCHED_MAX_SPLITS_DEBUG*GGML_SCHED_MAX_SPLIT_INPUTS][128]; // debug only
+@@ -1097,6 +1143,11 @@ void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct ggml_cgra
+     for (int i = 0; i < graph->n_nodes; i++) {
+         struct ggml_tensor * node = graph->nodes[i];
+         int * node_backend_id = &tensor_backend_id(node);
++        const int cuda_owner_id = ggml_backend_sched_cuda_owner_from_static_source(sched, node);
++        if (cuda_owner_id != -1) {
++            *node_backend_id = cuda_owner_id;
++            continue;
++        }
+         // do not overwrite user assignments
+         if (*node_backend_id == -1) {
+             *node_backend_id = ggml_backend_sched_backend_id_from_cur(sched, node);
+@@ -1240,6 +1291,15 @@ void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct ggml_cgra
+         } else {
+             // assigned node: upgrade to higher prio backend if possible
+             for (int b = 0; b < *node_backend_id; b++) {
++                if (ggml_backend_sched_cuda_bridge_requested()) {
++                    const char * current_name = ggml_backend_name(sched->backends[*node_backend_id]);
++                    const char * upgrade_name = ggml_backend_name(sched->backends[b]);
++                    if (current_name != NULL && upgrade_name != NULL &&
++                        strncmp(current_name, "CUDA", 4) == 0 &&
++                        strncmp(upgrade_name, "CUDA", 4) == 0) {
++                        continue;
++                    }
++                }
+                 if (sched->bufts[b] == sched->bufts[*node_backend_id] && ggml_backend_supports_op(sched->backends[b], node)) {
+                     bool supported = true;
+                     for (int j = 0; j < GGML_MAX_SRC; j++) {
+@@ -1383,6 +1443,18 @@ void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct ggml_cgra
+                 const int src_backend_id = sched->hv_tensor_backend_ids[src_id];
+                 GGML_ASSERT(src_backend_id != -1); // all inputs should be assigned by now
+ 
++                bool force_cuda_bridge_copy = false;
++                if (ggml_backend_sched_cuda_bridge_requested() &&
++                    src_backend_id != cur_backend_id) {
++                    const char * source_name = ggml_backend_name(sched->backends[src_backend_id]);
++                    const char * destination_name = ggml_backend_name(sched->backends[cur_backend_id]);
++                    const size_t nbytes = ggml_nbytes(src);
++                    force_cuda_bridge_copy = source_name != NULL && destination_name != NULL &&
++                        strncmp(source_name, "CUDA", 4) == 0 &&
++                        strncmp(destination_name, "CUDA", 4) == 0 &&
++                        nbytes > 0 && nbytes <= 64 * 1024 * 1024;
++                }
++
+                 if (src->flags & GGML_TENSOR_FLAG_INPUT && sched->n_copies > 1) {
+                     if (tensor_id_copy(src_id, src_backend_id, 0) == NULL) {
+                         ggml_backend_t backend = sched->backends[src_backend_id];
+@@ -1407,7 +1479,8 @@ void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct ggml_cgra
+                     }
+                 }
+ 
+-                if (src_backend_id != cur_backend_id && !ggml_backend_sched_buffer_supported(sched, src, cur_backend_id)) {
++                if (src_backend_id != cur_backend_id &&
++                    (force_cuda_bridge_copy || !ggml_backend_sched_buffer_supported(sched, src, cur_backend_id))) {
+                     // create a copy of the input in the split's backend
+                     if (tensor_id_copy(src_id, cur_backend_id, 0) == NULL) {
+                         ggml_backend_t backend = sched->backends[cur_backend_id];
+@@ -1689,7 +1762,13 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
+                 } else {
+                     ggml_backend_synchronize(split_backend);
+                 }
+-                ggml_backend_tensor_copy(input, input_cpy);
++                const bool bridge_copy = ggml_backend_sched_cuda_bridge_requested() &&
++                    split_backend->iface.cpy_tensor_async != NULL &&
++                    split_backend->iface.cpy_tensor_async(
++                        input_backend, split_backend, input, input_cpy);
++                if (!bridge_copy) {
++                    ggml_backend_tensor_copy(input, input_cpy);
++                }
+             } else {
+                 // wait for the split backend to finish using the input before overwriting it
+                 if (sched->events[split_backend_id][sched->cur_copy] != NULL) {
+diff --git a/ggml/src/ggml-cuda/common.cuh b/ggml/src/ggml-cuda/common.cuh
+index 9918c0394..e6ebeff28 100644
+--- a/ggml/src/ggml-cuda/common.cuh
++++ b/ggml/src/ggml-cuda/common.cuh
+@@ -1413,10 +1413,13 @@ struct ggml_cuda_stream_context {
+     }
+ };
+ 
++struct ggml_cuda_mapped_host_bridge;
++
+ struct ggml_backend_cuda_context {
+     int device;
+     std::string name;
+     cudaEvent_t copy_event = nullptr;
++    ggml_cuda_mapped_host_bridge * mapped_host_bridge = nullptr;
+ 
+     cudaStream_t streams[GGML_CUDA_MAX_DEVICES][GGML_CUDA_MAX_STREAMS] = { { nullptr } };
+     cublasHandle_t cublas_handles[GGML_CUDA_MAX_DEVICES][GGML_CUDA_MAX_STREAMS] = {nullptr};
+diff --git a/ggml/src/ggml-cuda/ggml-cuda.cu b/ggml/src/ggml-cuda/ggml-cuda.cu
+index 45e9537f0..761a619da 100644
+--- a/ggml/src/ggml-cuda/ggml-cuda.cu
++++ b/ggml/src/ggml-cuda/ggml-cuda.cu
+@@ -701,10 +701,14 @@ static std::mutex ggml_cuda_lock;
+ static std::condition_variable ggml_cuda_lock_cv;
+ static std::atomic<int> ggml_cuda_lock_counter;
+ 
++static void ggml_cuda_mapped_host_bridge_free(ggml_cuda_mapped_host_bridge * bridge);
++
+ ggml_backend_cuda_context::~ggml_backend_cuda_context() {
+     std::unique_lock<std::mutex> lock(ggml_cuda_lock);
+     ggml_cuda_lock_cv.wait(lock, []{ return ggml_cuda_lock_counter.load(std::memory_order_relaxed) == 0; });
+ 
++    ggml_cuda_mapped_host_bridge_free(mapped_host_bridge);
++
+     if (copy_event != nullptr) {
+         CUDA_CHECK(cudaEventDestroy(copy_event));
+     }
+@@ -2477,6 +2481,292 @@ static void ggml_backend_cuda_get_tensor_2d_async(ggml_backend_t backend, const
+         data, stride_data, (const char *) tensor->data + offset, stride_tensor, size, n_copies, cudaMemcpyDeviceToHost, cuda_ctx->stream()));
+ }
+ 
++#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
++
++static constexpr int    GGML_CUDA_MAPPED_BRIDGE_SLOTS     = 4;
++static constexpr size_t GGML_CUDA_MAPPED_BRIDGE_MAX_BYTES = 64 * 1024 * 1024;
++
++struct ggml_cuda_mapped_bridge_slot {
++    uint8_t * host       = nullptr;
++    uint8_t * dev_src    = nullptr;
++    uint8_t * dev_dst    = nullptr;
++    size_t capacity      = 0;
++    size_t flag_offset   = 0;
++    cudaEvent_t dst_done = nullptr;
++    bool in_flight       = false;
++};
++
++struct ggml_cuda_mapped_bridge_pair {
++    int src_device = -1;
++    int dst_device = -1;
++    std::array<ggml_cuda_mapped_bridge_slot, GGML_CUDA_MAPPED_BRIDGE_SLOTS> slots;
++    uint32_t next_slot  = 0;
++    uint32_t next_token = 1;
++    bool unsupported    = false;
++};
++
++struct ggml_cuda_mapped_host_bridge {
++    explicit ggml_cuda_mapped_host_bridge(int src_device) : src_device(src_device) {}
++
++    int src_device;
++    std::mutex mutex;
++    std::array<ggml_cuda_mapped_bridge_pair, GGML_CUDA_MAX_DEVICES> pairs;
++};
++
++static std::mutex ggml_cuda_mapped_bridge_init_mutex;
++
++static bool ggml_cuda_mapped_bridge_requested() {
++    const char * value = std::getenv("GGML_CUDA_MAPPED_HOST_BRIDGE");
++    return value != nullptr && strcmp(value, "1") == 0;
++}
++
++static void ggml_cuda_mapped_bridge_wait_slot(
++        ggml_cuda_mapped_bridge_pair & pair,
++        ggml_cuda_mapped_bridge_slot & slot) {
++    if (!slot.in_flight) {
++        return;
++    }
++    ggml_cuda_set_device(pair.dst_device);
++    CUDA_CHECK(cudaEventSynchronize(slot.dst_done));
++    slot.in_flight = false;
++}
++
++static void ggml_cuda_mapped_bridge_release_slot(
++        ggml_cuda_mapped_bridge_pair & pair,
++        ggml_cuda_mapped_bridge_slot & slot) {
++    ggml_cuda_mapped_bridge_wait_slot(pair, slot);
++    if (slot.dst_done != nullptr) {
++        ggml_cuda_set_device(pair.dst_device);
++        CUDA_CHECK(cudaEventDestroy(slot.dst_done));
++    }
++    if (slot.host != nullptr) {
++        ggml_cuda_set_device(pair.src_device);
++        CUDA_CHECK(cudaFreeHost(slot.host));
++    }
++    slot = {};
++}
++
++static bool ggml_cuda_mapped_bridge_prepare_slot(
++        ggml_cuda_mapped_bridge_pair & pair,
++        ggml_cuda_mapped_bridge_slot & slot,
++        size_t nbytes) {
++    ggml_cuda_mapped_bridge_wait_slot(pair, slot);
++    if (slot.capacity >= nbytes) {
++        return true;
++    }
++    ggml_cuda_mapped_bridge_release_slot(pair, slot);
++
++    cudaDeviceProp src_prop = {};
++    cudaDeviceProp dst_prop = {};
++    cudaError_t status = cudaGetDeviceProperties(
++        &src_prop, ggml_cuda_get_physical_device(pair.src_device));
++    if (status == cudaSuccess) {
++        status = cudaGetDeviceProperties(
++            &dst_prop, ggml_cuda_get_physical_device(pair.dst_device));
++    }
++    if (status != cudaSuccess || !src_prop.canMapHostMemory || !dst_prop.canMapHostMemory) {
++        (void) cudaGetLastError();
++        pair.unsupported = true;
++        return false;
++    }
++
++    slot.flag_offset = (nbytes + 63) & ~(size_t) 63;
++    const size_t allocation_size = slot.flag_offset + 64;
++    ggml_cuda_set_device(pair.src_device);
++    status = cudaHostAlloc(
++        reinterpret_cast<void **>(&slot.host), allocation_size,
++        cudaHostAllocPortable | cudaHostAllocMapped);
++    if (status == cudaSuccess) {
++        status = cudaHostGetDevicePointer(
++            reinterpret_cast<void **>(&slot.dev_src), slot.host, 0);
++    }
++    if (status == cudaSuccess) {
++        ggml_cuda_set_device(pair.dst_device);
++        status = cudaHostGetDevicePointer(
++            reinterpret_cast<void **>(&slot.dev_dst), slot.host, 0);
++    }
++    if (status == cudaSuccess) {
++        ggml_cuda_set_device(pair.src_device);
++        status = cudaMemset(slot.dev_src + slot.flag_offset, 0, sizeof(uint32_t));
++    }
++    if (status == cudaSuccess) {
++        ggml_cuda_set_device(pair.dst_device);
++        status = cudaEventCreateWithFlags(&slot.dst_done, cudaEventDisableTiming);
++    }
++    if (status != cudaSuccess) {
++        (void) cudaGetLastError();
++        ggml_cuda_mapped_bridge_release_slot(pair, slot);
++        pair.unsupported = true;
++        return false;
++    }
++
++    slot.capacity = nbytes;
++    return true;
++}
++
++static __global__ void ggml_cuda_mapped_bridge_store(
++        const uint8_t * src,
++        uint8_t * mapped,
++        size_t nbytes) {
++    const size_t tid = (size_t) blockIdx.x * blockDim.x + threadIdx.x;
++    const size_t stride = (size_t) gridDim.x * blockDim.x;
++    const bool aligned = ((reinterpret_cast<uintptr_t>(src) |
++                           reinterpret_cast<uintptr_t>(mapped)) & (alignof(uint4) - 1)) == 0;
++    if (aligned) {
++        const size_t n_vec = nbytes / sizeof(uint4);
++        for (size_t i = tid; i < n_vec; i += stride) {
++            reinterpret_cast<uint4 *>(mapped)[i] = reinterpret_cast<const uint4 *>(src)[i];
++        }
++        for (size_t i = n_vec * sizeof(uint4) + tid; i < nbytes; i += stride) {
++            mapped[i] = src[i];
++        }
++    } else {
++        for (size_t i = tid; i < nbytes; i += stride) {
++            mapped[i] = src[i];
++        }
++    }
++    __threadfence_system();
++}
++
++static __global__ void ggml_cuda_mapped_bridge_signal(uint32_t * signal, uint32_t token) {
++    __threadfence_system();
++    *reinterpret_cast<volatile uint32_t *>(signal) = token;
++    __threadfence_system();
++}
++
++static __global__ void ggml_cuda_mapped_bridge_wait(const uint32_t * signal, uint32_t token) {
++    while (*reinterpret_cast<const volatile uint32_t *>(signal) != token) {
++#if __CUDA_ARCH__ >= GGML_CUDA_CC_VOLTA
++        __nanosleep(100);
++#endif
++    }
++    __threadfence_system();
++}
++
++static __global__ void ggml_cuda_mapped_bridge_load(
++        const uint8_t * mapped,
++        uint8_t * dst,
++        size_t nbytes) {
++    const size_t tid = (size_t) blockIdx.x * blockDim.x + threadIdx.x;
++    const size_t stride = (size_t) gridDim.x * blockDim.x;
++    const bool aligned = ((reinterpret_cast<uintptr_t>(mapped) |
++                           reinterpret_cast<uintptr_t>(dst)) & (alignof(uint4) - 1)) == 0;
++    if (aligned) {
++        const size_t n_vec = nbytes / sizeof(uint4);
++        for (size_t i = tid; i < n_vec; i += stride) {
++            reinterpret_cast<uint4 *>(dst)[i] = reinterpret_cast<const uint4 *>(mapped)[i];
++        }
++        for (size_t i = n_vec * sizeof(uint4) + tid; i < nbytes; i += stride) {
++            dst[i] = mapped[i];
++        }
++    } else {
++        for (size_t i = tid; i < nbytes; i += stride) {
++            dst[i] = mapped[i];
++        }
++    }
++}
++
++static ggml_cuda_mapped_host_bridge * ggml_cuda_mapped_bridge_get(
++        ggml_backend_cuda_context * src_ctx) {
++    if (src_ctx->mapped_host_bridge == nullptr) {
++        std::lock_guard<std::mutex> lock(ggml_cuda_mapped_bridge_init_mutex);
++        if (src_ctx->mapped_host_bridge == nullptr) {
++            src_ctx->mapped_host_bridge = new ggml_cuda_mapped_host_bridge(src_ctx->device);
++        }
++    }
++    return src_ctx->mapped_host_bridge;
++}
++
++static bool ggml_cuda_mapped_bridge_copy(
++        ggml_backend_cuda_context * src_ctx,
++        ggml_backend_cuda_context * dst_ctx,
++        const ggml_tensor * src,
++        ggml_tensor * dst) {
++    const size_t nbytes = ggml_nbytes(dst);
++    if (nbytes == 0 || nbytes > GGML_CUDA_MAPPED_BRIDGE_MAX_BYTES ||
++        dst_ctx->device < 0 || dst_ctx->device >= GGML_CUDA_MAX_DEVICES) {
++        return false;
++    }
++
++    ggml_cuda_mapped_host_bridge * bridge = ggml_cuda_mapped_bridge_get(src_ctx);
++    std::lock_guard<std::mutex> lock(bridge->mutex);
++    ggml_cuda_mapped_bridge_pair & pair = bridge->pairs[dst_ctx->device];
++    pair.src_device = src_ctx->device;
++    pair.dst_device = dst_ctx->device;
++    if (pair.unsupported) {
++        return false;
++    }
++
++    ggml_cuda_mapped_bridge_slot & slot =
++        pair.slots[pair.next_slot++ % GGML_CUDA_MAPPED_BRIDGE_SLOTS];
++    if (!ggml_cuda_mapped_bridge_prepare_slot(pair, slot, nbytes)) {
++        return false;
++    }
++
++    if (pair.next_token == 0) {
++        for (auto & reset_slot : pair.slots) {
++            ggml_cuda_mapped_bridge_wait_slot(pair, reset_slot);
++            if (reset_slot.dev_src != nullptr) {
++                ggml_cuda_set_device(pair.src_device);
++                CUDA_CHECK(cudaMemset(
++                    reset_slot.dev_src + reset_slot.flag_offset, 0, sizeof(uint32_t)));
++            }
++        }
++        pair.next_token = 1;
++    }
++    const uint32_t token = pair.next_token++;
++
++    const int threads = 256;
++    const size_t work_items = (nbytes + sizeof(uint4) - 1) / sizeof(uint4);
++    const int blocks = (int) std::min<size_t>(
++        1024, std::max<size_t>(1, (work_items + threads - 1) / threads));
++
++    ggml_cuda_set_device(src_ctx->device);
++    ggml_cuda_mapped_bridge_store<<<blocks, threads, 0, src_ctx->stream()>>>(
++        static_cast<const uint8_t *>(src->data), slot.dev_src, nbytes);
++    ggml_cuda_mapped_bridge_signal<<<1, 1, 0, src_ctx->stream()>>>(
++        reinterpret_cast<uint32_t *>(slot.dev_src + slot.flag_offset), token);
++    CUDA_CHECK(cudaGetLastError());
++
++    ggml_cuda_set_device(dst_ctx->device);
++    ggml_cuda_mapped_bridge_wait<<<1, 1, 0, dst_ctx->stream()>>>(
++        reinterpret_cast<const uint32_t *>(slot.dev_dst + slot.flag_offset), token);
++    ggml_cuda_mapped_bridge_load<<<blocks, threads, 0, dst_ctx->stream()>>>(
++        slot.dev_dst, static_cast<uint8_t *>(dst->data), nbytes);
++    CUDA_CHECK(cudaGetLastError());
++    CUDA_CHECK(cudaEventRecord(slot.dst_done, dst_ctx->stream()));
++    slot.in_flight = true;
++    return true;
++}
++
++static void ggml_cuda_mapped_host_bridge_free(ggml_cuda_mapped_host_bridge * bridge) {
++    if (bridge == nullptr) {
++        return;
++    }
++    {
++        std::lock_guard<std::mutex> lock(bridge->mutex);
++        for (auto & pair : bridge->pairs) {
++            if (pair.src_device < 0 || pair.dst_device < 0) {
++                continue;
++            }
++            for (auto & slot : pair.slots) {
++                ggml_cuda_mapped_bridge_release_slot(pair, slot);
++            }
++        }
++    }
++    delete bridge;
++}
++
++#else
++
++struct ggml_cuda_mapped_host_bridge {};
++
++static void ggml_cuda_mapped_host_bridge_free(ggml_cuda_mapped_host_bridge * bridge) {
++    delete bridge;
++}
++
++#endif
++
+ static bool ggml_backend_cuda_cpy_tensor_async(ggml_backend_t backend_src, ggml_backend_t backend_dst, const ggml_tensor * src, ggml_tensor * dst) {
+     ggml_backend_buffer_t buf_src = src->view_src ? src->view_src->buffer : src->buffer;
+     ggml_backend_buffer_t buf_dst = dst->view_src ? dst->view_src->buffer : dst->buffer;
+@@ -2513,6 +2803,13 @@ static bool ggml_backend_cuda_cpy_tensor_async(ggml_backend_t backend_src, ggml_
+             CUDA_CHECK(cudaMemcpyAsync(dst->data, src->data, ggml_nbytes(dst), cudaMemcpyDeviceToDevice, cuda_ctx_src->stream()));
+         } else {
+ #ifdef GGML_CUDA_NO_PEER_COPY
++#if !defined(GGML_USE_HIP) && !defined(GGML_USE_MUSA)
++            if (std::getenv("GGML_CUDA_P2P") == nullptr &&
++                ggml_cuda_mapped_bridge_requested() &&
++                ggml_cuda_mapped_bridge_copy(cuda_ctx_src, cuda_ctx_dst, src, dst)) {
++                return true;
++            }
++#endif
+             return false;
+ #else
+             CUDA_CHECK(cudaMemcpyPeerAsync(dst->data, dst_physical, src->data, src_physical, ggml_nbytes(dst), cuda_ctx_src->stream()));
+-- 
+2.55.0
+

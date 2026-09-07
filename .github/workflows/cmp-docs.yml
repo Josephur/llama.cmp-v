@@ -1,0 +1,92 @@
+# Build and publish the llama-cmpv documentation portal to GitHub Pages.
+#
+# This workflow belongs to the CMP research fork, not to upstream llama.cpp. It
+# is scoped to cmp/** so it never runs for an upstream change, and it builds
+# cmp/mkdocs.yml explicitly so it can never pick up an upstream docs config.
+#
+# Pull requests get the validation but not the deploy: an entry with a broken
+# schema, a missing diagram or a stale index fails before it merges.
+
+name: cmp docs
+
+on:
+  push:
+    branches: [cmp/main, main]
+    paths:
+      - 'cmp/docs/**'
+      - 'cmp/mkdocs.yml'
+      - 'cmp/hooks/**'
+      - 'cmp/docs-requirements.txt'
+      - 'cmp/hooks/results_index.py'
+      - '.github/workflows/cmp-docs.yml'
+  pull_request:
+    paths:
+      - 'cmp/docs/**'
+      - 'cmp/mkdocs.yml'
+      - 'cmp/hooks/**'
+      - 'cmp/docs-requirements.txt'
+      - 'cmp/hooks/results_index.py'
+      - '.github/workflows/cmp-docs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cmp-docs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so the "edit this page" links and any future
+          # git-derived metadata resolve.
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: cmp/docs-requirements.txt
+
+      - name: Install portal dependencies
+        run: pip install -r cmp/docs-requirements.txt
+
+      - name: Validate results entries and index
+        # --check never writes. It fails when an entry is missing a required
+        # field, carries no diagram, disagrees with its own filename, or when
+        # the committed index does not match what the entries say.
+        run: python cmp/hooks/results_index.py --check
+
+      - name: Build the site
+        env:
+          # Nothing the build runs may leave bytecode caches in the tree.
+          PYTHONDONTWRITEBYTECODE: "1"
+        # --strict turns every MkDocs warning, including a broken internal
+        # link, into a failure.
+        run: mkdocs build -f cmp/mkdocs.yml --strict
+
+      - name: Upload the built site
+        if: github.repository == 'Josephur/llama.cmp-v' && !github.event.repository.private && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: cmp/site
+
+  deploy:
+    name: Deploy to GitHub Pages
+    if: github.repository == 'Josephur/llama.cmp-v' && !github.event.repository.private && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
