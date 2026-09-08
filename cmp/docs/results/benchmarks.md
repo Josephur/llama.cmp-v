@@ -3,15 +3,16 @@ title: Benchmarks
 description: Verified measurements accompanying permanently promoted patches.
 publication: accepted
 data:
+  - current-stock.json
   - baseline-baseline-20260905.csv
   - single-card-mmq-current-20260723.csv
 ---
 
 # Benchmarks
 
-These are the headline stock-versus-fork measurements for the two configurations tested directly. They are separate experiments with different models and harnesses: the one-card result does not predict six-card scaling, and the six-card result does not describe a small model on one card.
+The [current complete-series chart](index.md#complete-fork-versus-stock) is generated from the latest direct stock comparison and includes copyable commands. The measurements below are the **historical seven-patch baseline**, retained as evidence of the earlier configurations. They are separate experiments with different models and harnesses: the one-card result does not predict six-card scaling, and the six-card result does not describe a small model on one card.
 
-## Stock versus llama-cmpv at a glance
+## Historical seven-patch comparison
 
 <div class="cmp-benchmark-chart" role="figure" aria-labelledby="cmp-benchmark-chart-title" aria-describedby="cmp-benchmark-chart-note">
   <div class="cmp-benchmark-chart__heading">
@@ -141,7 +142,7 @@ The prefill gain comes from forcing the DP4A MMQ route at a shape where stock ll
 | 131K | 54.09 -> 122.33 tok/s | **+126.2%** | 2,423.25 -> 1,071.47 s | **-55.8%** | 12.273 -> 13.044 tok/s |
 | 250K | 35.65 -> 81.30 tok/s | **+128.1%** | 7,012.72 -> 3,075.13 s | **-56.1%** | 4.677 -> 5.041 tok/s |
 
-The arrows show stock llama.cpp first and the complete fork second. The main gain is prompt processing and time to first token. Decode ranges from -0.5% at 8K to +7.8% at 250K; the prefill percentage must not be quoted as generation speed.
+The arrows show stock llama.cpp first and the seven-patch fork second. The main gain is prompt processing and time to first token. Decode ranges from -0.5% at 8K to +7.8% at 250K; the prefill percentage must not be quoted as generation speed.
 
 ??? note "Model, six-card layout and complete server flags"
 

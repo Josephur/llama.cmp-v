@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="576" viewBox="0 0 1000 576" role="img" aria-labelledby="title desc">
+<title id="title">Complete fork versus stock llama.cpp</title>
+<desc id="desc">Matched prompt processing and generation throughput. Exact values and copyable commands accompany this chart.</desc>
+<rect width="1000" height="576" rx="16" fill="#101c2d"/>
+<style>text{font-family:DejaVu Sans,sans-serif;fill:#e2e8f0}.muted{fill:#a8bbce}.small{font-size:13px}.value{font-size:14px;font-weight:bold}</style>
+<text x="28" y="37" font-size="25" class="">Complete fork vs stock | 8 patches</text>
+<text x="28" y="64" font-size="15" class="muted">Qwen3.8 Flash Next UD-IQ4_XS | 6 CMP 100-210 cards | 2026-09-08</text>
+<text x="28" y="89" font-size="14" class="muted">Measured revision; subsequent source maintenance noted below</text>
+<text x="180" y="123" font-size="17" class="">Prompt processing (tok/s)</text>
+<text x="610" y="123" font-size="17" class="">Token generation (tok/s)</text>
+<text x="28" y="171" font-size="21" class="">8K</text>
+<rect x="180" y="151" width="131.49" height="23" rx="4" fill="#73879c"/>
+<text x="319.49079857513897" y="168" font-size="16" class="value">105.62</text>
+<rect x="180" y="183" width="260.00" height="23" rx="4" fill="#2dd4bf"/>
+<text x="448.0" y="200" font-size="16" class="value">208.84</text>
+<text x="180" y="227" font-size="16" class="small muted">1.977x stock (+97.73%)</text>
+<rect x="610" y="151" width="260.00" height="23" rx="4" fill="#73879c"/>
+<text x="878.0" y="168" font-size="16" class="value">28.12</text>
+<rect x="610" y="183" width="241.01" height="23" rx="4" fill="#2dd4bf"/>
+<text x="859.0067727067196" y="200" font-size="16" class="value">26.06</text>
+<text x="610" y="227" font-size="16" class="small muted">0.927x stock (-7.31%)</text>
+<text x="28" y="271" font-size="21" class="">64K</text>
+<rect x="180" y="251" width="91.00" height="23" rx="4" fill="#73879c"/>
+<text x="279.00145547126374" y="268" font-size="16" class="value">73.10</text>
+<rect x="180" y="283" width="196.02" height="23" rx="4" fill="#2dd4bf"/>
+<text x="384.0179245157796" y="300" font-size="16" class="value">157.45</text>
+<text x="180" y="327" font-size="16" class="small muted">2.154x stock (+115.40%)</text>
+<rect x="610" y="251" width="160.61" height="23" rx="4" fill="#73879c"/>
+<text x="778.6094921119297" y="268" font-size="16" class="value">17.37</text>
+<rect x="610" y="283" width="172.20" height="23" rx="4" fill="#2dd4bf"/>
+<text x="790.2014563337226" y="300" font-size="16" class="value">18.62</text>
+<text x="610" y="327" font-size="16" class="small muted">1.072x stock (+7.22%)</text>
+<text x="28" y="371" font-size="21" class="">128K</text>
+<rect x="180" y="351" width="66.09" height="23" rx="4" fill="#73879c"/>
+<text x="254.09237090072358" y="368" font-size="16" class="value">53.09</text>
+<rect x="180" y="383" width="147.81" height="23" rx="4" fill="#2dd4bf"/>
+<text x="335.81345512955136" y="400" font-size="16" class="value">118.73</text>
+<text x="180" y="427" font-size="16" class="small muted">2.236x stock (+123.65%)</text>
+<rect x="610" y="351" width="115.33" height="23" rx="4" fill="#73879c"/>
+<text x="733.3306005543488" y="368" font-size="16" class="value">12.47</text>
+<rect x="610" y="383" width="118.74" height="23" rx="4" fill="#2dd4bf"/>
+<text x="736.7405209818584" y="400" font-size="16" class="value">12.84</text>
+<text x="610" y="427" font-size="16" class="small muted">1.030x stock (+2.96%)</text>
+<text x="28" y="471" font-size="21" class="">250K</text>
+<rect x="180" y="451" width="43.84" height="23" rx="4" fill="#73879c"/>
+<text x="231.8410676713678" y="468" font-size="16" class="value">35.21</text>
+<rect x="180" y="483" width="100.64" height="23" rx="4" fill="#2dd4bf"/>
+<text x="288.6350220881085" y="500" font-size="16" class="value">80.83</text>
+<text x="180" y="527" font-size="16" class="small muted">2.295x stock (+129.55%)</text>
+<rect x="610" y="451" width="42.35" height="23" rx="4" fill="#73879c"/>
+<text x="660.3481832636958" y="468" font-size="16" class="value">4.58</text>
+<rect x="610" y="483" width="45.69" height="23" rx="4" fill="#2dd4bf"/>
+<text x="663.6928829051952" y="500" font-size="16" class="value">4.94</text>
+<text x="610" y="527" font-size="16" class="small muted">1.079x stock (+7.90%)</text>
+<text x="28" y="558" font-size="16" class="small muted">Gray: stock | Teal: complete fork | Median of 1 sample(s) per arm and context | Higher is faster</text>
+</svg>

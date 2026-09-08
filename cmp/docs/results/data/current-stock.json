@@ -1,0 +1,99 @@
+{
+  "build": {
+    "cpu_features": "SSE42 AVX AVX2 BMI2 F16C FMA",
+    "cuda_arch": "70-real",
+    "cuda_version": "12.9.2",
+    "ggml_native": "OFF"
+  },
+  "date": "2026-09-08",
+  "devices": 6,
+  "fork_command": "env GGML_CUDA_MAPPED_HOST_BRIDGE=1 GGML_CUDA_PROMPT_GRAPH_CAPTURE_SEED=1 GGML_SCHED_DEVICE_MASK=1 LLAMA_MODEL_LOAD_PARALLEL=1 llama-server \\\n  --jinja \\\n  --no-host \\\n  --no-repack \\\n  --load-mode mmap \\\n  --lazy-mode auto \\\n  --gpu-layers all \\\n  --split-mode layer \\\n  --batch-size 24576 \\\n  --ubatch-size 512 \\\n  --flash-attn on \\\n  --cache-type-k f16 \\\n  --cache-type-v f16 \\\n  --no-context-shift \\\n  --cuda-mmq force \\\n  --backend-sampling \\\n  --spec-type none \\\n  --metrics \\\n  --parallel 1 \\\n  --cache-ram 8192 \\\n  --ui-mcp-proxy \\\n  --webui-mcp-proxy \\\n  --ctx-size \"$CTX\" \\\n  --model \"$MODEL\" \\\n  --port 8080 \\\n  --host 127.0.0.1 \\\n  --n-predict 16384 \\\n  --device CUDA0,CUDA1,CUDA2,CUDA3,CUDA4,CUDA5 \\\n  --tensor-split 1,1,1,1,1,1",
+  "fork_commit": "63a8992d5b22e92bcc0eb7bd464c1b2ea215a0cc",
+  "limitations": [
+    "Matched requests and byte-exact outputs establish this measured comparison, not exhaustive numerical equivalence.",
+    "Single samples do not establish repeatability or statistical significance.",
+    "Request wall time is measured after model readiness; it excludes startup and is not time to first token.",
+    "Both arms include identical runtime phase instrumentation; stock has none of the 8 optimization-series patches."
+  ],
+  "model": "Qwen3.8 Flash Next UD-IQ4_XS",
+  "patches": [
+    "0001-dp4a-mmq-routing.patch",
+    "0002-volta-q4k-q5k-dp4a.patch",
+    "0003-parallel-model-load.patch",
+    "0004-mapped-host-bridge.patch",
+    "0005-research-selectors.patch",
+    "0006-prompt-graph-capture-seed.patch",
+    "0007-device-side-mask-expansion.patch",
+    "0008-sm70-d256-shared-q.patch"
+  ],
+  "public_source_tree": "9e0fe9420efdf98d2de4d3da47b731b93d5dbace",
+  "repeats": 1,
+  "request": {
+    "cache_prompt": false,
+    "ignore_eos": true,
+    "n_predict": 256,
+    "seed": 1234,
+    "stream": false,
+    "temperature": 0,
+    "top_k": 1
+  },
+  "rows": [
+    {
+      "context": 8192,
+      "fork_decode_tok_s": 26.06302386677972,
+      "fork_prompt_tok_s": 208.84000999332082,
+      "fork_wall_seconds": 49.028013999020914,
+      "server_context": 8448,
+      "stock_decode_tok_s": 28.116994926150436,
+      "stock_prompt_tok_s": 105.61746034023751,
+      "stock_wall_seconds": 86.65197330299998,
+      "tokens": 256
+    },
+    {
+      "context": 65536,
+      "fork_decode_tok_s": 18.622259515426897,
+      "fork_prompt_tok_s": 157.44763582594393,
+      "fork_wall_seconds": 430.03206872797455,
+      "server_context": 66048,
+      "stock_decode_tok_s": 17.36867798001049,
+      "stock_prompt_tok_s": 73.09517257702097,
+      "stock_wall_seconds": 911.3676037859987,
+      "tokens": 256
+    },
+    {
+      "context": 131072,
+      "fork_decode_tok_s": 12.840871638366812,
+      "fork_prompt_tok_s": 118.72832094770303,
+      "fork_wall_seconds": 1124.0103894079803,
+      "server_context": 131328,
+      "stock_decode_tok_s": 12.472115040832726,
+      "stock_prompt_tok_s": 53.087428459189915,
+      "stock_wall_seconds": 2489.6054037110007,
+      "tokens": 256
+    },
+    {
+      "context": 250000,
+      "fork_decode_tok_s": 4.941332910794466,
+      "fork_prompt_tok_s": 80.83315007137938,
+      "fork_wall_seconds": 3144.744494874991,
+      "server_context": 250368,
+      "stock_decode_tok_s": 4.579629438296237,
+      "stock_prompt_tok_s": 35.21449619463963,
+      "stock_wall_seconds": 7155.366783347999,
+      "tokens": 256
+    }
+  ],
+  "schema": 1,
+  "source_review": {
+    "changed_paths": [
+      "ggml/include/ggml-research.h"
+    ],
+    "measured_commit": "63a8992d5b22e92bcc0eb7bd464c1b2ea215a0cc",
+    "measured_series_commit": "93d2f3ca8cc8bb971dc95e0f92bd7ac67566f4c3",
+    "public_source_tree": "902c159d30bc3ff45426bc0ca74e38deec3c5d00",
+    "reason": "The measured Linux build is 63a8992d5b22. Subsequent commit 4f7bbe595be9 adds GGML_API visibility declarations and includes ggml.h for Windows DLL exports; it changes no selector implementation or CUDA kernel. Source review supports retaining these eight-patch Linux measurements, but the later revision was not benchmarked and these results make no Windows performance claim."
+  },
+  "stock_command": "env llama-server \\\n  --jinja \\\n  --no-host \\\n  --no-repack \\\n  --load-mode mmap \\\n  --lazy-mode auto \\\n  --gpu-layers all \\\n  --split-mode layer \\\n  --batch-size 24576 \\\n  --ubatch-size 512 \\\n  --flash-attn on \\\n  --cache-type-k f16 \\\n  --cache-type-v f16 \\\n  --no-context-shift \\\n  --backend-sampling \\\n  --spec-type none \\\n  --metrics \\\n  --parallel 1 \\\n  --cache-ram 8192 \\\n  --ui-mcp-proxy \\\n  --webui-mcp-proxy \\\n  --ctx-size \"$CTX\" \\\n  --model \"$MODEL\" \\\n  --port 8080 \\\n  --host 127.0.0.1 \\\n  --n-predict 16384 \\\n  --device CUDA0,CUDA1,CUDA2,CUDA3,CUDA4,CUDA5 \\\n  --tensor-split 1,1,1,1,1,1",
+  "stock_commit": "4d9176092d00586775af140581bb0b558ddc4389",
+  "upstream_base": "4d9176092d00586775af140581bb0b558ddc4389"
+}
