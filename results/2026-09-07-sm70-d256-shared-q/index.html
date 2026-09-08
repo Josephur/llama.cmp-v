@@ -1423,7 +1423,7 @@
 <li>The measured candidates were research snapshots. Promotion matched the accepted engine source to a committed rebuild; this does not retroactively change the original build provenance or establish selector attribution.</li>
 </ul>
 <h2 id="diagnostic-evidence">Diagnostic evidence<a class="headerlink" href="#diagnostic-evidence" title="Link to this section">&para;</a></h2>
-<p>On a physically modified CMP reporting V100, three selected D256 32x2 prefill kernels averaged 2.199467 ms before the refinement and 2.088928 ms after it, a 5.026% reduction. Each capture used 12 replay passes. Different firmware, exposed resources, PCIe configuration, model and attention shape prevent interpreting that result as a native-CMP speedup estimate. It is not a factory V100 comparison.</p>
+<p>On the V100-reporting comparison configuration, three selected D256 32x2 prefill kernels averaged 2.199467 ms before the refinement and 2.088928 ms after it, a 5.026% reduction. Each capture used 12 replay passes. Different firmware, exposed resources, PCIe configuration, model and attention shape prevent interpreting that result as a native-CMP speedup estimate. It is not a factory V100 comparison.</p>
 <p>No branch-hit count or source-instruction timing was collected. Profiler timing was excluded from native performance acceptance. At 250K, sampled mean per-card native prefill GPU activity remained approximately 16-21%; coarse utilization is not occupancy or proof of simultaneous activity. No PCIe saturation or repeatable traffic reduction is established.</p>
 <h2 id="source-and-measurement-records">Source and measurement records<a class="headerlink" href="#source-and-measurement-records" title="Link to this section">&para;</a></h2>
 <ul>
