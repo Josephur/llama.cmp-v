@@ -27,7 +27,7 @@ This site is the engineering record of making llama.cpp run well on them anyway.
 
     The cards are usually *idle*, not saturated. On a six-card long-context
     request each card spends a small fraction of the wall clock doing
-    arithmetic. The wins here are scheduling and transport, not faster kernels.
+    arithmetic. This motivates scheduling, transport and selected kernel investigations.
 
 -   :material-lock-check:{ .lg .middle } **Byte-for-byte or it does not ship**
 
@@ -97,13 +97,11 @@ Three consequences drive every decision on this site:
    [graph capture](patches/prompt-graph-capture-seed.md) matters more here than
    it would on a saturated node.
 
-And one constraint on the method itself: NVIDIA disables CUPTI on CMP parts, so
-Nsight and hardware counters are unavailable. Every number on this site comes
-from CUDA events and in-process timing. See [Method](method.md).
+Native CMP identification rejected Nsight CUDA profiling in the tested configuration. Separate diagnostic captures on a modified CMP reporting V100 informed the D256 investigation; those kernel timings are not native-CMP performance measurements. Public results distinguish ordinary inference timing from diagnostic profiling. See [Method](method.md).
 
 ## The series
 
-Seven inherited source mechanisms, each with its own page. Their source patches are reconstructible. The results timeline records later optimization attempts and human acceptance decisions; source documentation alone is not performance certification.
+All eight patches are in [one ordered series](https://github.com/Josephur/llama.cmp-v/tree/main/cmp/patches). Seven earlier mechanisms and the accepted D256 specialization compile together in the public source. The results timeline records accepted measurements and their limits; source reconstruction alone is not performance certification.
 
 | Patch | What it changes | Selector |
 | --- | --- | --- |
@@ -114,6 +112,8 @@ Seven inherited source mechanisms, each with its own page. Their source patches 
 | [Mapped pinned host bridge](patches/mapped-host-bridge.md) | Explicit, event-ordered staging for no-P2P card boundaries | `GGML_CUDA_MAPPED_HOST_BRIDGE` |
 | [Prompt graph capture seed](patches/prompt-graph-capture-seed.md) | Replays prompt graphs after a safe capture-only first observation | `GGML_CUDA_PROMPT_GRAPH_CAPTURE_SEED` |
 | [Device-side mask expansion](patches/device-side-mask-expansion.md) | Sends a compact visibility hint and rebuilds the mask on the GPU | — |
+
+[Eighth patch: SM70 D256 shared Q and unit rescaling](results/2026-09-07-sm70-d256-shared-q.md) documents the additional source specialization and its measured tradeoffs.
 
 [Read the series overview :material-arrow-right:](patches/index.md){ .md-button .md-button--primary }
 [Browse the timeline :material-arrow-right:](results/index.md){ .md-button }

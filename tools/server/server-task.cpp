@@ -1570,10 +1570,6 @@ std::string server_task_result_metrics::to_metrics() {
     };
 
     const std::vector<metric_item> gauges = {
-        { "telemetry_phase", "Last phase: 1 load, 2 ready, 3 prompt, 4 generation, 5 released; use events for overlapping slots", (double) metrics.telemetry_phase },
-        { "telemetry_phase_monotonic_seconds", "Monotonic time of last phase transition", metrics.telemetry_phase_us / 1.e6 },
-        { "telemetry_load_seconds", "Model load duration when complete", metrics.telemetry_load_end_us > metrics.telemetry_load_start_us ? (metrics.telemetry_load_end_us - metrics.telemetry_load_start_us) / 1.e6 : 0.0 },
-        { "telemetry_slot", "Slot of last phase transition or -1 for model lifecycle", (double) metrics.telemetry_request },
         {
             "prompt_tokens_seconds",
             "Average prompt throughput in tokens/s",

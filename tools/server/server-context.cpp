@@ -918,23 +918,6 @@ private:
 
     server_metrics metrics;
 
-    void metrics_phase(int phase, int64_t request = -1) {
-        if (!params_base.endpoint_metrics) {
-            return;
-        }
-        metrics.telemetry_phase = phase;
-        metrics.telemetry_phase_us = ggml_time_us();
-        metrics.telemetry_request = request;
-        if (phase == 1) { metrics.telemetry_load_start_us = metrics.telemetry_phase_us; }
-        if (phase == 2) { metrics.telemetry_load_end_us = metrics.telemetry_phase_us; }
-        const char * events = getenv("CMP_METRICS_EVENTS");
-        if (events && strcmp(events, "1") == 0) {
-            SRV_INF("CMP_PHASE phase=%d mono_us=%lld slot=%lld\n", phase,
-                    (long long) metrics.telemetry_phase_us, (long long) request);
-        }
-    }
-
-
     // queued prompt stats - llama_decode() is async, so the timing is only valid after a sync
     // note: kept out of server_metrics, which is copied as-is into the task result
     int64_t  t_decode_start  = 0; // start of the last submitted decode
@@ -1030,7 +1013,6 @@ private:
         const bool is_resume = sleeping;
 
         params_base = params;
-        metrics_phase(1);
         const auto output_limits = server_output_limits(params_base);
         params_base.n_outputs_max = output_limits.total;
         params_base.n_outputs_max_per_seq = output_limits.per_seq;
@@ -1320,7 +1302,6 @@ private:
             SLT_TRC(slot, "new slot, n_ctx = %d\n", slot.n_ctx);
 
             slot.callback_on_release = [this](int id_slot) {
-                metrics_phase(5, id_slot);
                 queue_tasks.pop_deferred_task(id_slot);
             };
 
@@ -1408,11 +1389,8 @@ private:
         params = params_base;
 
         if (!is_resume) {
-            const bool ready = init();
-            if (ready) { metrics_phase(2); }
-            return ready;
+            return init();
         }
-        metrics_phase(2);
 
         if (callback_state) {
             callback_state(SERVER_STATE_READY, {});
@@ -3149,7 +3127,6 @@ private:
                     // TODO: maybe move branch to outside of this loop in the future
                     if (slot.state == SLOT_STATE_STARTED) {
                         slot.stats.update_prompt_start();
-                        metrics_phase(3, slot.id);
 
                         slot.state = SLOT_STATE_PROCESSING_PROMPT;
 
@@ -3875,7 +3852,6 @@ private:
             slot.stats.n_gen += 1;
 
             if (slot.stats.n_gen == 1) {
-                metrics_phase(4, slot.id);
                 slot.stats.update_prompt_last();
                 slot.t_print_last = t_now;
                 slot.n_gen_last = 0;

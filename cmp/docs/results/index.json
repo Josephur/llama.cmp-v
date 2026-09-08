@@ -1,9 +1,7 @@
 {
   "schema_version": 1,
-  "generator": "cmp/hooks/results_index.py",
   "source_of_truth": "cmp/docs/results/*.md",
-  "note": "Generated. Do not edit. Edit the markdown entry and regenerate.",
-  "schema_reference": null,
+  "note": "Reviewed public measurements; see the linked result pages for interpretation.",
   "entry_count": 1,
   "entries": [
     {
@@ -313,7 +311,7 @@
       "commit": "4fe5ecd7536bad00fa4f589a293e9284d2086302",
       "upstream_base": "4d9176092d00586775af140581bb0b558ddc4389",
       "upstream_prs": [],
-      "patch": "cmp/patches/0001-sm70-d256-shared-q.patch",
+      "patch": "cmp/patches/0008-sm70-d256-shared-q.patch",
       "evidence": "cmp/docs/results/data/sm70-d256-shared-q-promotion.json",
       "promotion": "accepted",
       "tags": [
@@ -334,7 +332,7 @@
       "template": false,
       "source": "cmp/docs/results/2026-09-07-sm70-d256-shared-q.md",
       "url": "results/2026-09-07-sm70-d256-shared-q/",
-      "summary": "The user approved the combined shared-Q and unit-rescale candidate as a modestly helpful patch. All four primary contexts preserved exact 256-token output. At 250K, request wall time was 2.677% lower than the original saved reference, saving 86.499 seconds; 2.304 seconds of that saving was incremental to the first shared-Q candidate. Generation regressed at 8K and 65K against the original reference and at every context against the first candidate. Native repeatability and selector attribution remain unproven. The indexed headline now describes the combined candidate; the original measurements below remain unchanged historical evidence."
+      "summary": "The combined shared-Q and unit-rescale patch was accepted after review of its gains, regressions and measurement limits. All four primary contexts preserved exact 256-token output. At 250K, observed request wall time was 2.677% lower than the original saved reference. These single samples do not establish statistical repeatability or native kernel attribution."
     }
   ],
   "by_selector": {},

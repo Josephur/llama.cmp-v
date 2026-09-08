@@ -439,11 +439,6 @@ struct server_slot_stats {
 // unlike server_slot_stats, server_metrics is server-global and cumulative, not tied to a slot
 struct server_metrics {
     int64_t t_start = 0;
-    int telemetry_phase = 0;
-    int64_t telemetry_phase_us = 0;
-    int64_t telemetry_load_start_us = 0;
-    int64_t telemetry_load_end_us = 0;
-    int64_t telemetry_request = -1;
 
     struct bucket {
         uint64_t count = 0; // number of tokens

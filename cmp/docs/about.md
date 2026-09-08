@@ -35,16 +35,13 @@ inference, plus the full record of the experiments behind them.
 
 It is not a distribution and not a product. It is a patch series meant to be
 rebased onto upstream repeatedly, kept small enough that rebasing stays
-possible, and default-off so that carrying it changes nothing until a selector
-is set.
+possible, with activation behavior documented per mechanism. Some patches use runtime selectors; others change a supported source specialization.
 
 ## What it is not
 
 !!! info "Not a fork of upstream's direction"
 
-    Every patch here is additive and default-off. The repository root belongs to
-    upstream llama.cpp — its build, its documentation, its contributor guidance.
-    Everything this project adds lives under `cmp/`, including this site.
+    The fork preserves upstream llama.cpp source and its build system. Source modifications also live in the affected upstream files; the complete patch series and public documentation live under `cmp/`. Build, publishing and research tooling remain private.
 
 !!! info "Not benchmarks of llama.cpp"
 

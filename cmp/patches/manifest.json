@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "upstream_base": "4d9176092d00586775af140581bb0b558ddc4389",
+  "public_source_tree": "9e0fe9420efdf98d2de4d3da47b731b93d5dbace",
+  "patches": [
+    "0001-dp4a-mmq-routing.patch",
+    "0002-volta-q4k-q5k-dp4a.patch",
+    "0003-parallel-model-load.patch",
+    "0004-mapped-host-bridge.patch",
+    "0005-research-selectors.patch",
+    "0006-prompt-graph-capture-seed.patch",
+    "0007-device-side-mask-expansion.patch",
+    "0008-sm70-d256-shared-q.patch"
+  ],
+  "validation": "patch-application-and-source-equivalence",
+  "performance_certified": false
+}

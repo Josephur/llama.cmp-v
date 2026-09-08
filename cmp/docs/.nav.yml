@@ -1,9 +1,0 @@
-# Top-level navigation. Ordered for a stranger: what the machine is, then what
-# was done about it, then the evidence, then the rules.
-nav:
-  - Home: index.md
-  - The hardware: hardware.md
-  - The patches: patches
-  - Results: results
-  - Method: method.md
-  - About: about.md

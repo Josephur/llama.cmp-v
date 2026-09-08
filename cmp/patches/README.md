@@ -1,9 +1,20 @@
-# Release patches
+# Complete llama.cmp-v patch series
 
-This directory is reserved for machine-applicable patches, in application order, named `NNNN-<mechanism>.patch`. Explanatory pages under `cmp/docs/patches/` are not patch files.
+**All eight patches live here, in application order. Release binaries compile the complete series together.** The source in this repository already contains every patch; do not apply them again to a clone of this fork.
 
-The inherited source series lives under `cmp/releases/inherited/`; its manifest records verified reconstruction from the upstream base. This directory contains subsequently accepted optimizations. The generated source already includes those changes, so do not apply them twice.
+| Order | Patch |
+| --- | --- |
+| 1 | [DP4A MMQ routing](0001-dp4a-mmq-routing.patch) |
+| 2 | [Volta Q4_K / Q5_K DP4A routing](0002-volta-q4k-q5k-dp4a.patch) |
+| 3 | [Parallel model loading](0003-parallel-model-load.patch) |
+| 4 | [Mapped host bridge](0004-mapped-host-bridge.patch) |
+| 5 | [Research selector registry](0005-research-selectors.patch) |
+| 6 | [Prompt graph capture seed](0006-prompt-graph-capture-seed.patch) |
+| 7 | [Device-side mask expansion](0007-device-side-mask-expansion.patch) |
+| 8 | [SM70 D256 shared Q and unit rescaling](0008-sm70-d256-shared-q.patch) |
 
-Every patch excludes private tooling and must reproduce the reviewed source change when applied to its preceding fork base. Each accepted optimization has a result entry with verified output comparisons, measurements, regressions and the acceptance decision. Human acceptance of marginal gains does not establish statistical significance or runtime selector attribution. Unaccepted experiments retain their write-ups and evidence without becoming release patches.
+## Reconstructing from upstream
 
-- `0001-sm70-d256-shared-q.patch`: human-approved sm70-d256-shared-q; source already applied in the generated tree.
+The [manifest](manifest.json) pins upstream commit `4d9176092d00586775af140581bb0b558ddc4389` and the reconstructed source tree. Start with a clean checkout of that upstream commit, then apply all numbered patch files in lexical order with `git apply`. The first seven preserve the earlier mechanisms; patch 8 adds the accepted shared-Q and unit-rescale specialization.
+
+Patch application and source equivalence are checked before binary compilation. These checks establish which source is built; they do not certify performance or GPU correctness. Read the [measurements and limitations](../docs/results/2026-09-07-sm70-d256-shared-q.md) before interpreting speed changes. Private runtime telemetry instrumentation is not included in this series.
