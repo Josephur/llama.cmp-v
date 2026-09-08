@@ -40,8 +40,8 @@ from "this optimization is gone".
 
 ## The mechanism
 
-One header and one source file, with no dependency on the rest of ggml, so it
-survives upstream updates as a purely additive file. Every read is recorded.
+One header and one source file, using `GGML_API` from `ggml.h` so the registry
+is exported from shared libraries on Windows as well as Linux. Every read is recorded.
 
 ```mermaid
 flowchart LR

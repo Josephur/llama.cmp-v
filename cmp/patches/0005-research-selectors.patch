@@ -12,15 +12,14 @@ nothing reads an unknown environment variable, so nothing complains, and
 same-package A/B testing cannot detect it either because both arms are missing
 the same code.
 
-This adds a small additive registry, one header and one source file with no
-dependency on the rest of ggml, that records every selector read and exposes
-the report. A selector that a deployment sets but that no surviving code reads
+This adds a small additive registry, one header and one source file using ggml
+API visibility, that records every selector read and exposes the report. A selector that a deployment sets but that no surviving code reads
 becomes detectable instead of invisible.
 
 The registry changes no behaviour on its own. It is infrastructure the later
 patches read through, and a caching accessor keeps hot paths off the lock.
 ---
- ggml/include/ggml-research.h    |  77 +++++++++++++++++++++
+ ggml/include/ggml-research.h    |  78 +++++++++++++++++++++
  ggml/src/CMakeLists.txt         |   2 +
  ggml/src/ggml-cuda/mmq.cu       |   3 +-
  ggml/src/ggml-research.cpp      | 117 ++++++++++++++++++++++++++++++++
@@ -31,16 +30,16 @@ patches read through, and a caching accessor keeps hot paths off the lock.
  tools/server/server-context.h   |   2 +
  tools/server/server-task.cpp    |  60 ++++++++++++++++
  tools/server/server.cpp         |   2 +
- 11 files changed, 326 insertions(+), 8 deletions(-)
+ 11 files changed, 327 insertions(+), 8 deletions(-)
  create mode 100644 ggml/include/ggml-research.h
  create mode 100644 ggml/src/ggml-research.cpp
 
 diff --git a/ggml/include/ggml-research.h b/ggml/include/ggml-research.h
 new file mode 100644
-index 000000000..289d07740
+index 000000000..93c659a68
 --- /dev/null
 +++ b/ggml/include/ggml-research.h
-@@ -0,0 +1,77 @@
+@@ -0,0 +1,78 @@
 +#pragma once
 +
 +// Runtime research selectors.
@@ -51,8 +50,9 @@ index 000000000..289d07740
 +// ggml_research_set(), and the process environment otherwise. Callers must not cache the
 +// result across graph computes when they want to be switchable.
 +//
-+// Deliberately tiny and self-contained (one header, one source file, no dependency on the
-+// rest of ggml) so it survives upstream llama.cpp updates as an additive file.
++// One header and one source file; ggml.h supplies shared-library API visibility.
++
++#include "ggml.h"
 +
 +#include <stdint.h>
 +
@@ -62,17 +62,17 @@ index 000000000..289d07740
 +
 +// returns the override for `name` if set, else getenv(name); NULL when neither exists.
 +// the returned pointer stays valid until the next ggml_research_set() for that name.
-+const char * ggml_research_getenv(const char * name);
++GGML_API const char * ggml_research_getenv(const char * name);
 +
 +// integer convenience: atoi() of ggml_research_getenv(name), or `def` when unset
-+int ggml_research_getenv_int(const char * name, int def);
++GGML_API int ggml_research_getenv_int(const char * name, int def);
 +
 +// set (value != NULL) or clear (value == NULL) a runtime override
-+void ggml_research_set(const char * name, const char * value);
++GGML_API void ggml_research_set(const char * name, const char * value);
 +
 +// monotonically increasing counter, bumped by every ggml_research_set(); callers that cache
 +// a selector value can compare this to decide when to re-read
-+uint64_t ggml_research_generation(void);
++GGML_API uint64_t ggml_research_generation(void);
 +
 +// Activation reporting.
 +//
@@ -86,10 +86,10 @@ index 000000000..289d07740
 +//   {"read":[{"name":..,"value":..,"present":0|1,"reads":N}, ...]}
 +// `present` is whether a value existed at first read (override or environment).
 +// The caller must not free it; it stays valid until the next call.
-+const char * ggml_research_activation_report(void);
++GGML_API const char * ggml_research_activation_report(void);
 +
 +// 1 when `name` has been read at least once through this header, else 0.
-+int ggml_research_was_read(const char * name);
++GGML_API int ggml_research_was_read(const char * name);
 +
 +#ifdef __cplusplus
 +}

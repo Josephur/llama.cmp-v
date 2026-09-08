@@ -8,8 +8,9 @@
 // ggml_research_set(), and the process environment otherwise. Callers must not cache the
 // result across graph computes when they want to be switchable.
 //
-// Deliberately tiny and self-contained (one header, one source file, no dependency on the
-// rest of ggml) so it survives upstream llama.cpp updates as an additive file.
+// One header and one source file; ggml.h supplies shared-library API visibility.
+
+#include "ggml.h"
 
 #include <stdint.h>
 
@@ -19,17 +20,17 @@ extern "C" {
 
 // returns the override for `name` if set, else getenv(name); NULL when neither exists.
 // the returned pointer stays valid until the next ggml_research_set() for that name.
-const char * ggml_research_getenv(const char * name);
+GGML_API const char * ggml_research_getenv(const char * name);
 
 // integer convenience: atoi() of ggml_research_getenv(name), or `def` when unset
-int ggml_research_getenv_int(const char * name, int def);
+GGML_API int ggml_research_getenv_int(const char * name, int def);
 
 // set (value != NULL) or clear (value == NULL) a runtime override
-void ggml_research_set(const char * name, const char * value);
+GGML_API void ggml_research_set(const char * name, const char * value);
 
 // monotonically increasing counter, bumped by every ggml_research_set(); callers that cache
 // a selector value can compare this to decide when to re-read
-uint64_t ggml_research_generation(void);
+GGML_API uint64_t ggml_research_generation(void);
 
 // Activation reporting.
 //
@@ -43,10 +44,10 @@ uint64_t ggml_research_generation(void);
 //   {"read":[{"name":..,"value":..,"present":0|1,"reads":N}, ...]}
 // `present` is whether a value existed at first read (override or environment).
 // The caller must not free it; it stays valid until the next call.
-const char * ggml_research_activation_report(void);
+GGML_API const char * ggml_research_activation_report(void);
 
 // 1 when `name` has been read at least once through this header, else 0.
-int ggml_research_was_read(const char * name);
+GGML_API int ggml_research_was_read(const char * name);
 
 #ifdef __cplusplus
 }
