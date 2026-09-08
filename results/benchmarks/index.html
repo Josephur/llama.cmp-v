@@ -886,10 +886,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#stock-versus-llama-cmpv-at-a-glance" class="md-nav__link">
+  <a href="#historical-seven-patch-comparison" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Stock versus llama-cmpv at a glance
+        Historical seven-patch comparison
       
     </span>
   </a>
@@ -1065,10 +1065,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#stock-versus-llama-cmpv-at-a-glance" class="md-nav__link">
+  <a href="#historical-seven-patch-comparison" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Stock versus llama-cmpv at a glance
+        Historical seven-patch comparison
       
     </span>
   </a>
@@ -1137,8 +1137,8 @@
 
 
 <h1 id="benchmarks">Benchmarks<a class="headerlink" href="#benchmarks" title="Link to this section">&para;</a></h1>
-<p>These are the headline stock-versus-fork measurements for the two configurations tested directly. They are separate experiments with different models and harnesses: the one-card result does not predict six-card scaling, and the six-card result does not describe a small model on one card.</p>
-<h2 id="stock-versus-llama-cmpv-at-a-glance">Stock versus llama-cmpv at a glance<a class="headerlink" href="#stock-versus-llama-cmpv-at-a-glance" title="Link to this section">&para;</a></h2>
+<p>The <a href="../#complete-fork-versus-stock">current complete-series chart</a> is generated from the latest direct stock comparison and includes copyable commands. The measurements below are the <strong>historical seven-patch baseline</strong>, retained as evidence of the earlier configurations. They are separate experiments with different models and harnesses: the one-card result does not predict six-card scaling, and the six-card result does not describe a small model on one card.</p>
+<h2 id="historical-seven-patch-comparison">Historical seven-patch comparison<a class="headerlink" href="#historical-seven-patch-comparison" title="Link to this section">&para;</a></h2>
 <div class="cmp-benchmark-chart" role="figure" aria-labelledby="cmp-benchmark-chart-title" aria-describedby="cmp-benchmark-chart-note">
   <div class="cmp-benchmark-chart__heading">
     <p id="cmp-benchmark-chart-title" class="cmp-benchmark-chart__title">Prompt processing throughput vs stock</p>
@@ -1359,7 +1359,7 @@
 </tr>
 </tbody>
 </table>
-<p>The arrows show stock llama.cpp first and the complete fork second. The main gain is prompt processing and time to first token. Decode ranges from -0.5% at 8K to +7.8% at 250K; the prefill percentage must not be quoted as generation speed.</p>
+<p>The arrows show stock llama.cpp first and the seven-patch fork second. The main gain is prompt processing and time to first token. Decode ranges from -0.5% at 8K to +7.8% at 250K; the prefill percentage must not be quoted as generation speed.</p>
 <details class="note">
 <summary>Model, six-card layout and complete server flags</summary>
 <p><strong>Model:</strong> Qwen3.8 Flash Next UD-IQ4_XS</p>

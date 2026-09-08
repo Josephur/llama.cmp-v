@@ -1190,8 +1190,8 @@ enabled and none of them existed in the binary. Nothing in the system was
 capable of noticing.</p>
 </div>
 <h2 id="the-mechanism">The mechanism<a class="headerlink" href="#the-mechanism" title="Link to this section">&para;</a></h2>
-<p>One header and one source file, with no dependency on the rest of ggml, so it
-survives upstream updates as a purely additive file. Every read is recorded.</p>
+<p>One header and one source file, using <code>GGML_API</code> from <code>ggml.h</code> so the registry
+is exported from shared libraries on Windows as well as Linux. Every read is recorded.</p>
 <pre class="mermaid"><code>flowchart LR
     subgraph API["ggml-research.h"]
         GET["ggml_research_getenv(name)"]

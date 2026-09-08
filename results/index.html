@@ -956,6 +956,42 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#complete-fork-versus-stock" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Complete fork versus stock
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Complete fork versus stock">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#copyable-llamacpp-commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Copyable llama.cpp commands
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -972,6 +1008,138 @@
 
 
 <h1 id="promoted-patches">Promoted patches<a class="headerlink" href="#promoted-patches" title="Link to this section">&para;</a></h1>
+<!-- BEGIN GENERATED STOCK COMPARISON -->
+<h2 id="complete-fork-versus-stock">Complete fork versus stock<a class="headerlink" href="#complete-fork-versus-stock" title="Link to this section">&para;</a></h2>
+<p><img alt="Complete fork versus stock: prompt processing and generation throughput" src="../assets/current-stock.svg" /></p>
+<p><strong>Model:</strong> Qwen3.8 Flash Next UD-IQ4_XS. <strong>Hardware:</strong> 6 native CMP 100-210 cards. <strong>Measured:</strong> 2026-09-08 (America/Indiana/Indianapolis).</p>
+<p><strong>Coverage:</strong> 8 patches; stock <code>4d9176092d00</code>, fork <code>63a8992d5b22</code>. Median of 1 sample(s) per arm/context; exactly 256 generated tokens with byte-exact output.</p>
+<p><strong>Source maintenance after measurement:</strong> The measured Linux build is 63a8992d5b22. Subsequent commit 4f7bbe595be9 adds GGML_API visibility declarations and includes ggml.h for Windows DLL exports; it changes no selector implementation or CUDA kernel. Source review supports retaining these eight-patch Linux measurements, but the later revision was not benchmarked and these results make no Windows performance claim.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Prompt tokens</th>
+<th style="text-align: right;">Server context</th>
+<th style="text-align: right;">Prefill: stock → fork (tok/s)</th>
+<th style="text-align: right;">Generation: stock → fork (tok/s)</th>
+<th style="text-align: right;">Request time change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">8,192</td>
+<td style="text-align: right;">8,448</td>
+<td style="text-align: right;">105.62 → 208.84</td>
+<td style="text-align: right;">28.12 → 26.06</td>
+<td style="text-align: right;">-43.42%</td>
+</tr>
+<tr>
+<td style="text-align: right;">65,536</td>
+<td style="text-align: right;">66,048</td>
+<td style="text-align: right;">73.10 → 157.45</td>
+<td style="text-align: right;">17.37 → 18.62</td>
+<td style="text-align: right;">-52.81%</td>
+</tr>
+<tr>
+<td style="text-align: right;">131,072</td>
+<td style="text-align: right;">131,328</td>
+<td style="text-align: right;">53.09 → 118.73</td>
+<td style="text-align: right;">12.47 → 12.84</td>
+<td style="text-align: right;">-54.85%</td>
+</tr>
+<tr>
+<td style="text-align: right;">250,000</td>
+<td style="text-align: right;">250,368</td>
+<td style="text-align: right;">35.21 → 80.83</td>
+<td style="text-align: right;">4.58 → 4.94</td>
+<td style="text-align: right;">-56.05%</td>
+</tr>
+</tbody>
+</table>
+<p>Negative request time changes mean faster completion. Prompt processing gains are separate from generation speed.</p>
+<h3 id="copyable-llamacpp-commands">Copyable llama.cpp commands<a class="headerlink" href="#copyable-llamacpp-commands" title="Link to this section">&para;</a></h3>
+<p>Set <code>MODEL</code> to the first GGUF shard and <code>CTX</code> to a server context from the table. Set <code>CUDA_VISIBLE_DEVICES</code> to your six chosen cards before running either command. Run one server at a time.</p>
+<p><strong>Stock:</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>env<span class="w"> </span>llama-server<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span>--jinja<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span>--no-host<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span>--no-repack<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">  </span>--load-mode<span class="w"> </span>mmap<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="w">  </span>--lazy-mode<span class="w"> </span>auto<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span>--gpu-layers<span class="w"> </span>all<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">  </span>--split-mode<span class="w"> </span>layer<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">  </span>--batch-size<span class="w"> </span><span class="m">24576</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">  </span>--ubatch-size<span class="w"> </span><span class="m">512</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">  </span>--flash-attn<span class="w"> </span>on<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">  </span>--cache-type-k<span class="w"> </span>f16<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">  </span>--cache-type-v<span class="w"> </span>f16<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="w">  </span>--no-context-shift<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="w">  </span>--backend-sampling<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="w">  </span>--spec-type<span class="w"> </span>none<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="w">  </span>--metrics<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="w">  </span>--parallel<span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="w">  </span>--cache-ram<span class="w"> </span><span class="m">8192</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-20"><a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="w">  </span>--ui-mcp-proxy<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-21"><a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="w">  </span>--webui-mcp-proxy<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-22"><a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="w">  </span>--ctx-size<span class="w"> </span><span class="s2">"</span><span class="nv">$CTX</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-23"><a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="w">  </span>--model<span class="w"> </span><span class="s2">"</span><span class="nv">$MODEL</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-24"><a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a><span class="w">  </span>--port<span class="w"> </span><span class="m">8080</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-25"><a id="__codelineno-0-25" name="__codelineno-0-25" href="#__codelineno-0-25"></a><span class="w">  </span>--host<span class="w"> </span><span class="m">127</span>.0.0.1<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-26"><a id="__codelineno-0-26" name="__codelineno-0-26" href="#__codelineno-0-26"></a><span class="w">  </span>--n-predict<span class="w"> </span><span class="m">16384</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-27"><a id="__codelineno-0-27" name="__codelineno-0-27" href="#__codelineno-0-27"></a><span class="w">  </span>--device<span class="w"> </span>CUDA0,CUDA1,CUDA2,CUDA3,CUDA4,CUDA5<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-0-28"><a id="__codelineno-0-28" name="__codelineno-0-28" href="#__codelineno-0-28"></a><span class="w">  </span>--tensor-split<span class="w"> </span><span class="m">1</span>,1,1,1,1,1
+</span></code></pre></div>
+<p><strong>Complete fork:</strong></p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>env<span class="w"> </span><span class="nv">GGML_CUDA_MAPPED_HOST_BRIDGE</span><span class="o">=</span><span class="m">1</span><span class="w"> </span><span class="nv">GGML_CUDA_PROMPT_GRAPH_CAPTURE_SEED</span><span class="o">=</span><span class="m">1</span><span class="w"> </span><span class="nv">GGML_SCHED_DEVICE_MASK</span><span class="o">=</span><span class="m">1</span><span class="w"> </span><span class="nv">LLAMA_MODEL_LOAD_PARALLEL</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>llama-server<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">  </span>--jinja<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">  </span>--no-host<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span>--no-repack<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">  </span>--load-mode<span class="w"> </span>mmap<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">  </span>--lazy-mode<span class="w"> </span>auto<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">  </span>--gpu-layers<span class="w"> </span>all<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">  </span>--split-mode<span class="w"> </span>layer<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">  </span>--batch-size<span class="w"> </span><span class="m">24576</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">  </span>--ubatch-size<span class="w"> </span><span class="m">512</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">  </span>--flash-attn<span class="w"> </span>on<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="w">  </span>--cache-type-k<span class="w"> </span>f16<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="w">  </span>--cache-type-v<span class="w"> </span>f16<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a><span class="w">  </span>--no-context-shift<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a><span class="w">  </span>--cuda-mmq<span class="w"> </span>force<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a><span class="w">  </span>--backend-sampling<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a><span class="w">  </span>--spec-type<span class="w"> </span>none<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a><span class="w">  </span>--metrics<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-19"><a id="__codelineno-1-19" name="__codelineno-1-19" href="#__codelineno-1-19"></a><span class="w">  </span>--parallel<span class="w"> </span><span class="m">1</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-20"><a id="__codelineno-1-20" name="__codelineno-1-20" href="#__codelineno-1-20"></a><span class="w">  </span>--cache-ram<span class="w"> </span><span class="m">8192</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-21"><a id="__codelineno-1-21" name="__codelineno-1-21" href="#__codelineno-1-21"></a><span class="w">  </span>--ui-mcp-proxy<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-22"><a id="__codelineno-1-22" name="__codelineno-1-22" href="#__codelineno-1-22"></a><span class="w">  </span>--webui-mcp-proxy<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-23"><a id="__codelineno-1-23" name="__codelineno-1-23" href="#__codelineno-1-23"></a><span class="w">  </span>--ctx-size<span class="w"> </span><span class="s2">"</span><span class="nv">$CTX</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-24"><a id="__codelineno-1-24" name="__codelineno-1-24" href="#__codelineno-1-24"></a><span class="w">  </span>--model<span class="w"> </span><span class="s2">"</span><span class="nv">$MODEL</span><span class="s2">"</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-25"><a id="__codelineno-1-25" name="__codelineno-1-25" href="#__codelineno-1-25"></a><span class="w">  </span>--port<span class="w"> </span><span class="m">8080</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-26"><a id="__codelineno-1-26" name="__codelineno-1-26" href="#__codelineno-1-26"></a><span class="w">  </span>--host<span class="w"> </span><span class="m">127</span>.0.0.1<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-27"><a id="__codelineno-1-27" name="__codelineno-1-27" href="#__codelineno-1-27"></a><span class="w">  </span>--n-predict<span class="w"> </span><span class="m">16384</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-28"><a id="__codelineno-1-28" name="__codelineno-1-28" href="#__codelineno-1-28"></a><span class="w">  </span>--device<span class="w"> </span>CUDA0,CUDA1,CUDA2,CUDA3,CUDA4,CUDA5<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-1-29"><a id="__codelineno-1-29" name="__codelineno-1-29" href="#__codelineno-1-29"></a><span class="w">  </span>--tensor-split<span class="w"> </span><span class="m">1</span>,1,1,1,1,1
+</span></code></pre></div>
+<p>Both binaries use CUDA 12.9.2, <code>70-real</code>, <code>GGML_NATIVE=OFF</code>, CPU features <code>SSE42 AVX AVX2 BMI2 F16C FMA</code>, and identical runtime phase instrumentation. Stock uses upstream automatic MMQ routing; the fork enables its documented MMQ route and selectors.</p>
+<p><strong>Completion request settings</strong> (the harness supplies an exact-length tokenized prompt):</p>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="p">{</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="nt">"cache_prompt"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="nt">"ignore_eos"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="nt">"n_predict"</span><span class="p">:</span><span class="w"> </span><span class="mi">256</span><span class="p">,</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span><span class="nt">"seed"</span><span class="p">:</span><span class="w"> </span><span class="mi">1234</span><span class="p">,</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span><span class="nt">"stream"</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="w">  </span><span class="nt">"temperature"</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="w">  </span><span class="nt">"top_k"</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="p">}</span>
+</span></code></pre></div>
+<ul>
+<li>Matched requests and byte-exact outputs establish this measured comparison, not exhaustive numerical equivalence.</li>
+<li>Single samples do not establish repeatability or statistical significance.</li>
+<li>Request wall time is measured after model readiness; it excludes startup and is not time to first token.</li>
+<li>Both arms include identical runtime phase instrumentation; stock has none of the 8 optimization-series patches.</li>
+</ul>
+<p><a href="benchmarks/">Benchmark details</a> · <a href="data/current-stock.json">Machine-readable measurements</a></p>
+<!-- END GENERATED STOCK COMPARISON -->
+
 <p>Only permanently adopted patches appear here. Each entry links its source patch and measured data, including regressions and validation limits. Human acceptance does not imply statistical significance.</p>
 <p>The <a href="benchmarks/">benchmark guide</a> explains the linked measurements. The <a href="index.json">machine-readable index</a> contains the same promoted entries.</p>
 <p>Inherited entries retain the date recorded in their original patch headers. Entries that share that date follow their preserved application order in the public patch series.</p>
