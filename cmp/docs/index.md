@@ -109,6 +109,7 @@ All eight patches are in [one ordered series](https://github.com/Josephur/llama.
 [Eighth patch: SM70 D256 shared Q and unit rescaling](results/2026-09-07-sm70-d256-shared-q.md) documents the additional source specialization and its measured tradeoffs.
 
 [Read the series overview :material-arrow-right:](patches/index.md){ .md-button .md-button--primary }
+[See stock-versus-fork benchmarks :material-speedometer:](results/benchmarks.md){ .md-button .md-button--primary }
 [Browse the timeline :material-arrow-right:](results/index.md){ .md-button }
 
 ## Reading this site

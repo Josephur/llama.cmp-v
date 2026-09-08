@@ -1,0 +1,3 @@
+model,devices,prompt_tokens,batch_size,ubatch_size,metric,stock_auto,fork_force,change_pct,repetitions,unit
+Qwen3.5 9B Q4_K_XL,1,8192,2048,1024,prompt throughput,352.61,1087.33,208.37,3,tokens/second
+Qwen3.5 9B Q4_K_XL,1,0,2048,512,generation throughput,61.70,61.64,-0.107,3,tokens/second
