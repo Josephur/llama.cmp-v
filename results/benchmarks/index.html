@@ -835,6 +835,24 @@
         
       
       
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Benchmarks
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
       <a href="./" class="md-nav__link md-nav__link--active">
         
   
@@ -851,6 +869,80 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#stock-versus-llama-cmpv-at-a-glance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stock versus llama-cmpv at a glance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#one-cmp-100-210" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One CMP 100-210
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#six-cmp-100-210-cards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Six CMP 100-210 cards
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#latest-incremental-patch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Latest incremental patch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#publication-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Publication policy
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
       
     </li>
   
@@ -966,6 +1058,69 @@
     
   
   
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#stock-versus-llama-cmpv-at-a-glance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Stock versus llama-cmpv at a glance
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#one-cmp-100-210" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One CMP 100-210
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#six-cmp-100-210-cards" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Six CMP 100-210 cards
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#latest-incremental-patch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Latest incremental patch
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#publication-policy" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Publication policy
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
 </nav>
                   </div>
                 </div>
@@ -982,6 +1137,380 @@
 
 
 <h1 id="benchmarks">Benchmarks<a class="headerlink" href="#benchmarks" title="Link to this section">&para;</a></h1>
+<p>These are the headline stock-versus-fork measurements for the two configurations tested directly. They are separate experiments with different models and harnesses: the one-card result does not predict six-card scaling, and the six-card result does not describe a small model on one card.</p>
+<h2 id="stock-versus-llama-cmpv-at-a-glance">Stock versus llama-cmpv at a glance<a class="headerlink" href="#stock-versus-llama-cmpv-at-a-glance" title="Link to this section">&para;</a></h2>
+<div class="cmp-benchmark-chart" role="figure" aria-labelledby="cmp-benchmark-chart-title" aria-describedby="cmp-benchmark-chart-note">
+  <div class="cmp-benchmark-chart__heading">
+    <p id="cmp-benchmark-chart-title" class="cmp-benchmark-chart__title">Prompt processing throughput vs stock</p>
+    <p class="cmp-benchmark-chart__subtitle">Matched A/B within each row; stock = 1.00x. Bar scale ends at 3.20x.</p>
+  </div>
+  <div class="cmp-benchmark-chart__group">
+    <div class="cmp-benchmark-chart__context">
+      <strong>1 card / 8K</strong>
+      <span>Qwen3.5 9B Q4_K_XL</span>
+    </div>
+    <div class="cmp-benchmark-chart__bars">
+      <div class="cmp-benchmark-bar cmp-benchmark-bar--stock" style="--cmp-bar-size: 31.25%"><span>Stock</span><b>1.000x</b><small>352.61 tok/s</small></div>
+      <div class="cmp-benchmark-bar cmp-benchmark-bar--fork" style="--cmp-bar-size: 96.38%"><span>llama-cmpv</span><b>3.084x</b><small>1,087.33 tok/s</small></div>
+    </div>
+  </div>
+  <div class="cmp-benchmark-chart__group cmp-benchmark-chart__group--six">
+    <div class="cmp-benchmark-chart__context">
+      <strong>6 cards / 8K</strong>
+      <span>Qwen3.8 Flash Next UD-IQ4_XS</span>
+    </div>
+    <div class="cmp-benchmark-chart__bars">
+      <div class="cmp-benchmark-bar cmp-benchmark-bar--stock" style="--cmp-bar-size: 31.25%"><span>Stock</span><b>1.000x</b><small>108.98 tok/s</small></div>
+      <div class="cmp-benchmark-bar cmp-benchmark-bar--fork" style="--cmp-bar-size: 64.19%"><span>llama-cmpv</span><b>2.054x</b><small>223.80 tok/s</small></div>
+    </div>
+  </div>
+  <div class="cmp-benchmark-chart__group cmp-benchmark-chart__group--six">
+    <div class="cmp-benchmark-chart__context">
+      <strong>6 cards / 32K</strong>
+      <span>Qwen3.8 Flash Next UD-IQ4_XS</span>
+    </div>
+    <div class="cmp-benchmark-chart__bars">
+      <div class="cmp-benchmark-bar cmp-benchmark-bar--stock" style="--cmp-bar-size: 31.25%"><span>Stock</span><b>1.000x</b><small>92.37 tok/s</small></div>
+      <div class="cmp-benchmark-bar cmp-benchmark-bar--fork" style="--cmp-bar-size: 68.00%"><span>llama-cmpv</span><b>2.176x</b><small>200.96 tok/s</small></div>
+    </div>
+  </div>
+  <div class="cmp-benchmark-chart__group cmp-benchmark-chart__group--six">
+    <div class="cmp-benchmark-chart__context">
+      <strong>6 cards / 65K</strong>
+      <span>Qwen3.8 Flash Next UD-IQ4_XS</span>
+    </div>
+    <div class="cmp-benchmark-chart__bars">
+      <div class="cmp-benchmark-bar cmp-benchmark-bar--stock" style="--cmp-bar-size: 31.25%"><span>Stock</span><b>1.000x</b><small>74.79 tok/s</small></div>
+      <div class="cmp-benchmark-bar cmp-benchmark-bar--fork" style="--cmp-bar-size: 69.44%"><span>llama-cmpv</span><b>2.222x</b><small>166.15 tok/s</small></div>
+    </div>
+  </div>
+  <div class="cmp-benchmark-chart__group cmp-benchmark-chart__group--six">
+    <div class="cmp-benchmark-chart__context">
+      <strong>6 cards / 131K</strong>
+      <span>Qwen3.8 Flash Next UD-IQ4_XS</span>
+    </div>
+    <div class="cmp-benchmark-chart__bars">
+      <div class="cmp-benchmark-bar cmp-benchmark-bar--stock" style="--cmp-bar-size: 31.25%"><span>Stock</span><b>1.000x</b><small>54.09 tok/s</small></div>
+      <div class="cmp-benchmark-bar cmp-benchmark-bar--fork" style="--cmp-bar-size: 70.69%"><span>llama-cmpv</span><b>2.262x</b><small>122.33 tok/s</small></div>
+    </div>
+  </div>
+  <div class="cmp-benchmark-chart__group cmp-benchmark-chart__group--six">
+    <div class="cmp-benchmark-chart__context">
+      <strong>6 cards / 250K</strong>
+      <span>Qwen3.8 Flash Next UD-IQ4_XS</span>
+    </div>
+    <div class="cmp-benchmark-chart__bars">
+      <div class="cmp-benchmark-bar cmp-benchmark-bar--stock" style="--cmp-bar-size: 31.25%"><span>Stock</span><b>1.000x</b><small>35.65 tok/s</small></div>
+      <div class="cmp-benchmark-bar cmp-benchmark-bar--fork" style="--cmp-bar-size: 71.28%"><span>llama-cmpv</span><b>2.281x</b><small>81.30 tok/s</small></div>
+    </div>
+  </div>
+  <p id="cmp-benchmark-chart-note" class="cmp-benchmark-chart__note">Prompt processing only. The one-card and six-card tests used different models and harnesses; compare fork with stock within a row, not one row with another. Decode results are reported in the exact tables below.</p>
+</div>
+
+<h2 id="one-cmp-100-210">One CMP 100-210<a class="headerlink" href="#one-cmp-100-210" title="Link to this section">&para;</a></h2>
+<p><strong>Qwen3.5 9B Q4_K_XL, 8,192 prompt tokens, current-upstream same-binary policy A/B</strong></p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th style="text-align: right;">Stock <code>auto</code> policy</th>
+<th style="text-align: right;">llama-cmpv <code>force</code> policy</th>
+<th style="text-align: right;">Change</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Prompt processing</td>
+<td style="text-align: right;">352.61 tok/s</td>
+<td style="text-align: right;">1,087.33 tok/s</td>
+<td style="text-align: right;"><strong>+208.37% (3.084x)</strong></td>
+</tr>
+<tr>
+<td>Token generation</td>
+<td style="text-align: right;">61.70 tok/s</td>
+<td style="text-align: right;">61.64 tok/s</td>
+<td style="text-align: right;"><strong>-0.107%</strong></td>
+</tr>
+</tbody>
+</table>
+<p>The prefill gain comes from forcing the DP4A MMQ route at a shape where stock llama.cpp selected cuBLAS. It is not a 3.084x generation claim. Three repetitions covered each cell in the full prompt and micro-batch matrix; the maximum control coefficient of variation was 2.132%.</p>
+<details class="note">
+<summary>Model, build and complete benchmark flags</summary>
+<p><strong>Model:</strong> Qwen3.5 9B Q4_K_XL</p>
+<p><strong>Hardware:</strong> one native CMP 100-210, selected as <code>CUDA0</code>; maximum observed temperature 70 C</p>
+<p><strong>Build:</strong> current-upstream artifact <code>c588c4f47683e73ad2d69f50480bec6cc85fd0f7</code>, native SM70</p>
+<p><strong>Prefill command flags:</strong></p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>--model &lt;Qwen3.5-9B-Q4_K_XL.gguf&gt;
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>--output json
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>--progress
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>--n-gpu-layers 999
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>--split-mode layer
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>--device CUDA0
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>--flash-attn on
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>--cuda-mmq auto|force
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>--repetitions 3
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>--n-prompt 8192
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>--n-gen 0
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>--batch-size 2048
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>--ubatch-size 1024
+</span></code></pre></div>
+<p><strong>Decode control flags:</strong> the same common flags, with <code>--n-prompt 0 --n-gen 128 --batch-size 2048 --ubatch-size 512</code>.</p>
+<p><code>CUDA_VISIBLE_DEVICES=0</code> restricted both arms to the same card. Only <code>--cuda-mmq auto</code> versus <code>--cuda-mmq force</code> changed within the current build. Model paths, device UUIDs and machine identities are intentionally excluded from the public record.</p>
+</details>
+<table>
+<thead>
+<tr>
+<th>model</th>
+<th>devices</th>
+<th>prompt tokens</th>
+<th>batch size</th>
+<th>ubatch size</th>
+<th>metric</th>
+<th>stock auto</th>
+<th>fork force</th>
+<th>change pct</th>
+<th>repetitions</th>
+<th>unit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Qwen3.5 9B Q4_K_XL</td>
+<td>1</td>
+<td>8192</td>
+<td>2048</td>
+<td>1024</td>
+<td>prompt throughput</td>
+<td>352.61</td>
+<td>1087.33</td>
+<td>208.37</td>
+<td>3</td>
+<td>tokens/second</td>
+</tr>
+<tr>
+<td>Qwen3.5 9B Q4_K_XL</td>
+<td>1</td>
+<td>0</td>
+<td>2048</td>
+<td>512</td>
+<td>generation throughput</td>
+<td>61.70</td>
+<td>61.64</td>
+<td>-0.107</td>
+<td>3</td>
+<td>tokens/second</td>
+</tr>
+</tbody>
+</table>
+<p><a class="cmp-data-link" download="download" href="../data/single-card-mmq-current-20260723.csv">Download <code>single-card-mmq-current-20260723.csv</code></a></p>
+<h2 id="six-cmp-100-210-cards">Six CMP 100-210 cards<a class="headerlink" href="#six-cmp-100-210-cards" title="Link to this section">&para;</a></h2>
+<p><strong>Qwen3.8 Flash Next UD-IQ4_XS, layer split across six cards, 256 generated tokens</strong></p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">Prompt context</th>
+<th style="text-align: right;">Prefill throughput</th>
+<th style="text-align: right;">Prefill gain</th>
+<th style="text-align: right;">TTFT</th>
+<th style="text-align: right;">TTFT reduction</th>
+<th style="text-align: right;">Decode throughput</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">8K</td>
+<td style="text-align: right;">108.98 -&gt; 223.80 tok/s</td>
+<td style="text-align: right;"><strong>+105.4%</strong></td>
+<td style="text-align: right;">75.17 -&gt; 36.60 s</td>
+<td style="text-align: right;"><strong>-51.3%</strong></td>
+<td style="text-align: right;">26.424 -&gt; 26.295 tok/s</td>
+</tr>
+<tr>
+<td style="text-align: right;">32K</td>
+<td style="text-align: right;">92.37 -&gt; 200.96 tok/s</td>
+<td style="text-align: right;"><strong>+117.6%</strong></td>
+<td style="text-align: right;">354.75 -&gt; 163.05 s</td>
+<td style="text-align: right;"><strong>-54.0%</strong></td>
+<td style="text-align: right;">21.550 -&gt; 21.634 tok/s</td>
+</tr>
+<tr>
+<td style="text-align: right;">65K</td>
+<td style="text-align: right;">74.79 -&gt; 166.15 tok/s</td>
+<td style="text-align: right;"><strong>+122.2%</strong></td>
+<td style="text-align: right;">876.27 -&gt; 394.43 s</td>
+<td style="text-align: right;"><strong>-55.0%</strong></td>
+<td style="text-align: right;">17.756 -&gt; 17.922 tok/s</td>
+</tr>
+<tr>
+<td style="text-align: right;">131K</td>
+<td style="text-align: right;">54.09 -&gt; 122.33 tok/s</td>
+<td style="text-align: right;"><strong>+126.2%</strong></td>
+<td style="text-align: right;">2,423.25 -&gt; 1,071.47 s</td>
+<td style="text-align: right;"><strong>-55.8%</strong></td>
+<td style="text-align: right;">12.273 -&gt; 13.044 tok/s</td>
+</tr>
+<tr>
+<td style="text-align: right;">250K</td>
+<td style="text-align: right;">35.65 -&gt; 81.30 tok/s</td>
+<td style="text-align: right;"><strong>+128.1%</strong></td>
+<td style="text-align: right;">7,012.72 -&gt; 3,075.13 s</td>
+<td style="text-align: right;"><strong>-56.1%</strong></td>
+<td style="text-align: right;">4.677 -&gt; 5.041 tok/s</td>
+</tr>
+</tbody>
+</table>
+<p>The arrows show stock llama.cpp first and the complete fork second. The main gain is prompt processing and time to first token. Decode ranges from -0.5% at 8K to +7.8% at 250K; the prefill percentage must not be quoted as generation speed.</p>
+<details class="note">
+<summary>Model, six-card layout and complete server flags</summary>
+<p><strong>Model:</strong> Qwen3.8 Flash Next UD-IQ4_XS</p>
+<p><strong>Hardware:</strong> six native CMP 100-210 cards in equal layer split, no usable P2P path</p>
+<p><strong>Requests:</strong> 8,192 / 32,768 / 65,536 / 131,072 / 250,000 prompt tokens followed by exactly 256 generated tokens. Server contexts were pinned to 8,449 / 33,025 / 65,793 / 131,328 / 250,368 respectively.</p>
+<p><strong>Common server flags:</strong></p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>--jinja
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>--no-host
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>--no-repack
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>--load-mode mmap
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>--lazy-mode auto
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>--gpu-layers all
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>--split-mode layer
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>--batch-size 24576
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>--ubatch-size 512
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>--flash-attn on
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>--cache-type-k f16
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>--cache-type-v f16
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>--no-context-shift
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>--cuda-mmq force
+</span><span id="__span-1-15"><a id="__codelineno-1-15" name="__codelineno-1-15" href="#__codelineno-1-15"></a>--backend-sampling
+</span><span id="__span-1-16"><a id="__codelineno-1-16" name="__codelineno-1-16" href="#__codelineno-1-16"></a>--spec-type none
+</span><span id="__span-1-17"><a id="__codelineno-1-17" name="__codelineno-1-17" href="#__codelineno-1-17"></a>--metrics
+</span><span id="__span-1-18"><a id="__codelineno-1-18" name="__codelineno-1-18" href="#__codelineno-1-18"></a>--parallel 1
+</span></code></pre></div>
+<p><strong>Fork selectors:</strong> <code>GGML_CUDA_MAPPED_HOST_BRIDGE=1</code>, <code>GGML_CUDA_PROMPT_GRAPH_CAPTURE_SEED=1</code>, <code>GGML_SCHED_DEVICE_MASK=1</code>, and <code>LLAMA_MODEL_LOAD_PARALLEL=1</code>.</p>
+<p>The retained public table records the measured server contexts exactly; minor one-token context differences reflect the historical harness. Paths, ports, service names, GPU UUIDs and host identity are intentionally omitted.</p>
+</details>
+<details class="info">
+<summary>Download the complete six-card measurements</summary>
+<table>
+<thead>
+<tr>
+<th>context</th>
+<th>build</th>
+<th>server ctx</th>
+<th>prompt tok s</th>
+<th>ttft s</th>
+<th>decode tok s</th>
+<th>tokens</th>
+<th>markers ok</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>8192</td>
+<td>stock</td>
+<td>8449</td>
+<td>108.98</td>
+<td>75.17</td>
+<td>26.424</td>
+<td>256</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>8192</td>
+<td>fork</td>
+<td>8449</td>
+<td>223.80</td>
+<td>36.60</td>
+<td>26.295</td>
+<td>256</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>32768</td>
+<td>stock</td>
+<td>33025</td>
+<td>92.37</td>
+<td>354.75</td>
+<td>21.550</td>
+<td>256</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>32768</td>
+<td>fork</td>
+<td>33025</td>
+<td>200.96</td>
+<td>163.05</td>
+<td>21.634</td>
+<td>256</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>65536</td>
+<td>stock</td>
+<td>65793</td>
+<td>74.79</td>
+<td>876.27</td>
+<td>17.756</td>
+<td>256</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>65536</td>
+<td>fork</td>
+<td>65793</td>
+<td>166.15</td>
+<td>394.43</td>
+<td>17.922</td>
+<td>256</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>131072</td>
+<td>stock</td>
+<td>131328</td>
+<td>54.09</td>
+<td>2423.25</td>
+<td>12.273</td>
+<td>256</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>131072</td>
+<td>fork</td>
+<td>131328</td>
+<td>122.33</td>
+<td>1071.47</td>
+<td>13.044</td>
+<td>256</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>250000</td>
+<td>stock</td>
+<td>250368</td>
+<td>35.65</td>
+<td>7012.72</td>
+<td>4.677</td>
+<td>256</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>250000</td>
+<td>fork</td>
+<td>250368</td>
+<td>81.30</td>
+<td>3075.13</td>
+<td>5.041</td>
+<td>256</td>
+<td>yes</td>
+</tr>
+</tbody>
+</table>
+<p><a class="cmp-data-link" download="download" href="../data/baseline-baseline-20260905.csv">Download <code>baseline-baseline-20260905.csv</code></a></p>
+</details>
+<h2 id="latest-incremental-patch">Latest incremental patch<a class="headerlink" href="#latest-incremental-patch" title="Link to this section">&para;</a></h2>
+<p>The later SM70 D256 shared-Q and unit-rescaling patch was measured against the already optimized six-card fork, not directly against stock. It reduced complete request time by 0.32% at 8K, 1.39% at 65K, 2.16% at 131K and 2.68% at 250K. Those byte-exact results were single saved-reference comparisons with uncontrolled drift; read the <a href="../2026-09-07-sm70-d256-shared-q/">full result and limitations</a>.</p>
+<h2 id="publication-policy">Publication policy<a class="headerlink" href="#publication-policy" title="Link to this section">&para;</a></h2>
 <p>The public portal publishes measurements only when a patch is permanently adopted. Ongoing, undecided and declined experiments stay in the private research record. A running test never appends to a published measurement file.</p>
 <p>Each entry in the <a href="../">promoted patch timeline</a> links its verified CSV and source patch. CSVs record the model label, device count, prompt and server contexts, exact output count, absolute reference and candidate measurements, and signed percentage changes. Negative duration changes mean faster execution; positive throughput changes mean faster execution.</p>
 <p>Read the full result before treating a number as an improvement. Entries retain regressions, output checks, sampling limits and whether runtime activation was established. A human can accept a small or uncertain gain without claiming statistical significance. Saved-reference comparisons do not eliminate thermal or runtime drift.</p>
