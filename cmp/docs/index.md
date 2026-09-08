@@ -10,24 +10,17 @@ hide:
 
 # Mining cards, made to serve tokens
 
-The NVIDIA CMP 100-210 is a GV100 die sold for cryptocurrency mining. It has the
-compute of a datacentre card and almost none of the plumbing: **one PCIe Gen1
-lane**, no peer-to-peer path between cards, no NVLink, no display output, and no
-profiler. Bought used, it is one of the cheapest ways to put a lot of HBM2 behind
-a lot of FP16 throughput. Bought used, it is also a card that most inference
-software quietly assumes does not exist.
+The **NVIDIA CMP 100-210 / CMP 100HX-210** uses GV100 silicon and HBM2 memory, but native CMP configuration has fewer usable compute units, severely reduced tensor and FP64 throughput, and a **PCIe Gen1 x1** connection. The tested multi-card system also lacks a usable peer route. The [hardware comparison](hardware.md) records the measured differences and their limits.
 
 This site is the engineering record of making llama.cpp run well on them anyway.
 
 <div class="grid cards" markdown>
 
--   :material-speedometer:{ .lg .middle } **Not an arithmetic problem**
+-   :material-speedometer:{ .lg .middle } **Measure compute and transport**
 
     ---
 
-    The cards are usually *idle*, not saturated. On a six-card long-context
-    request each card spends a small fraction of the wall clock doing
-    arithmetic. This motivates scheduling, transport and selected kernel investigations.
+    Tensor throughput, host transfers and scheduling can each limit a request. Measure the intended model and device split before choosing a kernel or transport optimization.
 
 -   :material-lock-check:{ .lg .middle } **Byte-for-byte or it does not ship**
 
@@ -97,7 +90,7 @@ Three consequences drive every decision on this site:
    [graph capture](patches/prompt-graph-capture-seed.md) matters more here than
    it would on a saturated node.
 
-Native CMP identification rejected Nsight CUDA profiling in the tested configuration. Separate diagnostic captures on a modified CMP reporting V100 informed the D256 investigation; those kernel timings are not native-CMP performance measurements. Public results distinguish ordinary inference timing from diagnostic profiling. See [Method](method.md).
+Native CMP identification rejected Nsight CUDA profiling in the tested configuration. Separate diagnostic captures on a V100-reporting configuration informed the D256 investigation; those kernel timings are not native-CMP performance measurements. Public results distinguish ordinary inference timing from diagnostic profiling. See [Method](method.md).
 
 ## The series
 

@@ -1,154 +1,109 @@
 ---
-title: The hardware
-description: What a CMP 100-210 is, what it lacks, and which absences cost the most.
+title: Hardware and limitations
+description: NVIDIA CMP 100-210 / CMP 100HX-210 compute units, tensor and FP64 throughput, PCIe restrictions, and measured comparison with a V100-reporting configuration.
 ---
 
-# The hardware
+# Hardware and limitations
 
-## What the card is
-
-The CMP 100-210 is NVIDIA's Cryptocurrency Mining Processor built on the GV100
-die: the same silicon as a Tesla V100, with the parts a miner does not pay for
-removed. It reports as compute capability **7.0**, native SM70 Volta. Kernels
-compile to real cubins; there is no PTX fallback and no forward-compatible JIT
-path to lean on, so anything that assumes SM75+ features simply does not build
-or does not run.
-
-What is present is worth having: HBM2 at roughly 850 GB/s and the full Volta
-tensor-core complement. What is absent is the whole design problem.
+The **NVIDIA CMP 100-210**, also known as **CMP 100HX-210**, uses GV100 silicon and reports CUDA compute capability **7.0 (SM70)**. Its HBM2 capacity and bandwidth make it useful for inference, but the GV100 name does not imply V100-level compute throughput or connectivity.
 
 ## What was taken away
 
+The following resource and performance differences were observed in a September 7, 2026 hardware comparison. They describe tested configurations; they do not identify the hardware or firmware mechanism responsible for each restriction.
+
 <div class="grid cards" markdown>
+
+-   :material-chip:{ .lg .middle } **Fewer usable compute units**
+
+    ---
+
+    All nine native CMP cards enumerated reported **4,352 CUDA cores**, compared with **5,120** in the V100-reporting configuration. Kernels executed on **68 distinct SMs** in the tested native CMP and **80 SMs** in the comparison configuration. That is 12 fewer executing SMs, not merely a different product name. Exact physical tensor-core counts were not measured.
+
+-   :material-calculator:{ .lg .middle } **Severely reduced tensor throughput**
+
+    ---
+
+    Direct FP16 tensor operations with FP32 accumulation reached **4.99 TFLOPS** on native CMP versus **98.71 TFLOPS** in the V100-reporting configuration, a **19.8x** difference in this probe. Both produced correct output. Tensor operations execute on CMP, but their usable throughput is far below what the silicon's ancestry might suggest. This is a throughput measurement, not a universal instruction-latency ratio.
+
+-   :material-calculator-variant:{ .lg .middle } **Severely reduced FP64 throughput**
+
+    ---
+
+    FP64 matrix multiplication reached **0.354 TFLOPS** versus **5.68 TFLOPS**, about a **16x** difference. A separate direct double-precision FMA probe showed the same large deficit. FP32 was much closer, so treating all arithmetic as equally restricted would be misleading.
 
 -   :material-transit-connection-variant:{ .lg .middle } **PCIe Gen1, one lane**
 
     ---
 
-    Around 250 MB/s each way. Not Gen3 x16, not Gen1 x16 — one lane at the
-    oldest signalling rate. Host-to-device bandwidth is roughly 3,400&times;
-    narrower than the card's own memory.
+    Native cards negotiated **Gen1 x1**, with roughly 250 MB/s per direction before transaction overhead. Measured pinned-memory transfers reached about **200 MB/s to the GPU** and **209 MB/s back**, compared with **13.17 GB/s** and **12.50 GB/s** over Gen3 x16 in the comparison configuration. Model loading, offloading and host-staged card boundaries pay this cost.
 
--   :material-link-off:{ .lg .middle } **No peer-to-peer, no NVLink**
+-   :material-memory:{ .lg .middle } **Lower memory clock**
 
     ---
 
-    `cudaDeviceCanAccessPeer` is false for every pair. A tensor moving from one
-    card to another traverses the link twice, through host memory, with nothing
-    in the driver to hide it.
+    Native cards reported **810 MHz** memory clocks versus **877 MHz** in the comparison configuration. Both exposed approximately **16 GB** and a **4,096-bit** memory bus. High on-card bandwidth remains a strength, but memory specifications alone do not describe compute performance.
 
--   :material-chart-timeline-variant-shimmer:{ .lg .middle } **No CUPTI**
+-   :material-chart-timeline-variant-shimmer:{ .lg .middle } **No supported CUPTI profiling**
 
     ---
 
-    NVIDIA disables the profiling interface on CMP parts. Nsight Systems,
-    Nsight Compute and every hardware counter are unavailable. Attribution is
-    done with CUDA events and in-process timing.
+    NVIDIA explicitly excludes CMP from CUPTI support. Nsight CUDA profiling was rejected on the native CMP configuration. CUDA events and other instrumentation can still provide measurements; unavailable CUPTI support does not mean all observation is impossible. See [NVIDIA's CUPTI result codes](https://docs.nvidia.com/cupti/api/group__CUPTI__RESULT__API.html).
 
--   :material-monitor-off:{ .lg .middle } **No display, no video engines**
+-   :material-monitor-off:{ .lg .middle } **No display outputs**
 
     ---
 
-    Headless by construction. Irrelevant for inference, but it means the card
-    is invisible to a great deal of tooling that expects a display device.
+    The cards are headless. NVIDIA describes removal of display outputs as a CMP design choice. This does not by itself establish that every graphics or video-processing engine is absent. See [NVIDIA's CMP announcement](https://blogs.nvidia.cn/blog/geforce-cmp/).
 
 </div>
 
-## Why the link dominates
+## Measured compute and transfer comparison
 
-Put the numbers on one scale and the strategy writes itself.
+**V100 below means the tested V100-reporting configuration. These are configuration measurements, not factory V100 specifications or a same-board before/after experiment.** Compute measurements used one native CMP and one comparison device. Only the reported CUDA-core inventory covered all nine native CMP cards.
 
-| Path | Bandwidth | Relative to the link |
+| Measurement | Native CMP 100-210 | V100 (reported identity) |
 | --- | ---: | ---: |
-| HBM2, on-card | ~850,000 MB/s | **3,400&times;** |
-| PCIe Gen3 x16, for reference | ~12,600 MB/s | 50&times; |
-| **PCIe Gen1 x1, what these cards have** | **~250 MB/s** | 1&times; |
+| CUDA cores reported | 4,352 | 5,120 |
+| Distinct SMs observed executing kernels | 68 | 80 |
+| Direct WMMA, FP16 inputs / FP32 accumulation | 4.985 TFLOPS | 98.710 TFLOPS |
+| FP16 matrix multiplication, FP32 output | 5.610 TFLOPS | 64.460 TFLOPS |
+| FP32 matrix multiplication | 10.890 TFLOPS | 12.094 TFLOPS |
+| FP64 matrix multiplication | 0.3543 TFLOPS | 5.680 TFLOPS |
+| Direct FP32 FMA | 11.785 TFLOPS | 12.551 TFLOPS |
+| Direct FP64 FMA | 0.3761 TFLOPS | 6.303 TFLOPS |
+| Pinned host memory to GPU | 0.19974 GB/s | 13.172 GB/s |
+| GPU to pinned host memory | 0.20890 GB/s | 12.502 GB/s |
+| Device-to-device copy, payload bytes | 366.123 GB/s | 403.713 GB/s |
+| Memory clock | 810 MHz | 877 MHz |
+| Negotiated PCIe link | Gen1 x1 | Gen3 x16 |
 
-```mermaid
-flowchart LR
-    HBM["HBM2 on-card<br/>~850 GB/s"]
-    G3["PCIe Gen3 x16<br/>~12.6 GB/s<br/><small>what a normal card gets</small>"]
-    G1["PCIe Gen1 x1<br/>~0.25 GB/s<br/><small>what these cards get</small>"]
+### Method and limits
 
-    HBM -->|"&divide; 68"| G3
-    G3 -->|"&divide; 50"| G1
+Timings are medians of three repetitions using the same compiled SM70 probe on both configurations, CUDA 12.9.2, cuBLAS 12.9.2 and driver 575.57.08. Clocks were not changed; short tests include boost transitions, so these are not clock-normalized peak ratings. One-second telemetry cannot establish identical clocks for every kernel.
 
-    classDef fast fill:#0f766e,stroke:#134e4a,color:#fff
-    classDef mid fill:#475569,stroke:#1e293b,color:#fff
-    classDef slow fill:#c2410c,stroke:#7c2d12,color:#fff
-    class HBM fast
-    class G3 mid
-    class G1 slow
-```
+The table's matrix tests used 2,048 x 2,048 matrices; 1,024 x 1,024 cases were also checked. Each timed repetition contained five matrix multiplications after warmup. Constant inputs had exactly representable expected outputs, and every output element matched. FP32 used pedantic compute mode. Direct WMMA used four accumulators per warp, 2,000 iterations, four warps per block and four blocks per SM; all outputs matched, and disassembly confirmed HMMA instructions. These checks demonstrate the tested operations, not general model correctness.
 
-On-card memory is about three and a half orders of magnitude faster than the
-link that feeds it. Anything that crosses the link is therefore worth removing
-outright; compressing it is a second-best answer, and hiding it behind overlap
-is a third.
+Direct scalar probes used eight FMA chains and 20,000 iterations. Disassembly confirmed FFMA and DFMA, but scalar output validation was limited to finite, positive values. Transfers used 64 MiB buffers and verified all copied bytes. Device-copy bandwidth counts payload once; reading and writing that payload creates roughly twice as much HBM traffic. Do not compare that column directly with a memory-bandwidth specification.
 
-This is why the patch series contains no new arithmetic kernels. Faster maths on
-a card that is idle most of the wall clock buys nothing.
+Both configurations report the same 6 MiB L2 cache, 96 KiB shared memory and 65,536 registers per SM, and a maximum SM clock of 1,380 MHz. Both advertise an FP32-to-FP64 performance ratio of 2 despite the measured native FP64 deficit. Capability fields are not throughput measurements. Conflicting ECC reports prevent a claim about functional ECC differences.
 
-## Where the wall clock actually goes
+## Other limits of the tested system
 
-On a six-card long-context request, the shape looks like this. The cards are
-mostly waiting.
+**No usable peer route or NVLink connection was observed.** The P2P read matrix reports **chipset not supported** between every pair, including pairs involving the V100-reporting device. This establishes a limitation of the tested host, not a proven CMP-only restriction. Cross-card transfers in this configuration stage through host memory.
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant H as Host thread
-    participant D as CUDA driver
-    participant C0 as Card 0
-    participant C5 as Card 5
+## What this means for llama.cpp
 
-    H->>D: build and submit graph nodes
-    Note over H,D: submission cost is paid per node,<br/>and the cards are not saturated
-    D->>C0: launch layer block
-    C0-->>D: done
-    C0->>H: boundary tensor down the link
-    Note over C0,H: no P2P: every card handoff is<br/>a host round trip
-    H->>C5: boundary tensor up the link
-    D->>C5: launch layer block
-    C5-->>D: done
-    C5->>H: logits
-```
+Both compute and transport matter. Reduced tensor throughput makes kernel selection important during prompt processing; the narrow PCIe link affects startup, offloading and multi-card boundaries. The dominant cost depends on model, quantization, context length, batch size and device split. A faster isolated kernel does not automatically produce a faster request.
 
-Three costs stand out, and each has a patch aimed at it:
-
-| Cost | Patch |
+| Cost to investigate | Relevant patch |
 | --- | --- |
-| Per-node driver submission on idle cards | [Prompt graph capture seed](patches/prompt-graph-capture-seed.md) |
-| Card-to-card boundaries staged ad hoc through the host | [Mapped pinned host bridge](patches/mapped-host-bridge.md) |
-| Per-ubatch mask uploads across the link | [Device-side mask expansion](patches/device-side-mask-expansion.md) |
+| Unsuitable quantized matrix routing on SM70 | [DP4A MMQ routing](patches/mmq-dp4a-routing.md) and [Q4_K / Q5_K coverage](patches/mmq-dp4a-q4k-q5k.md) |
+| Serial per-GPU model upload | [Parallel model load](patches/parallel-model-load.md) |
+| Host-staged card boundaries | [Mapped pinned host bridge](patches/mapped-host-bridge.md) |
+| Prompt graph submission | [Prompt graph capture seed](patches/prompt-graph-capture-seed.md) |
+| Repeated mask uploads | [Device-side mask expansion](patches/device-side-mask-expansion.md) |
+| D256 attention work | [Accepted shared-query investigation](results/2026-09-07-sm70-d256-shared-q.md) |
 
-And two that are not inference at all but still dominate a cold start or a
-prefill:
+Use an SM70-capable toolchain. The project's binary configuration targets native `70-real` cubins without PTX fallback. That is a build choice, not an additional hardware feature removed from CMP.
 
-| Cost | Patch |
-| --- | --- |
-| Serial per-GPU weight upload at model load | [Parallel model load](patches/parallel-model-load.md) |
-| Automatic MMQ policy choosing an unhelpful route on SM70 | [DP4A MMQ routing](patches/mmq-dp4a-routing.md) and [Q4_K / Q5_K coverage](patches/mmq-dp4a-q4k-q5k.md) |
-
-## Consequences for anyone reproducing this
-
-!!! warning "SM70 is a real constraint, not a compatibility flag"
-
-    Build with an SM70-native toolchain. The pinned CUDA container in
-    Builds emit `70-real` cubins with no PTX, so a binary
-    either runs on these cards or fails immediately rather than JIT-compiling
-    something slower at first launch.
-
-!!! info "Machine-specific values are not in this repository"
-
-    No host, device UUID, filesystem path or service name appears anywhere in
-    the source tree or on this site. They live in a machine-specific
-    configuration file that is never committed.
-    An audit script enforces this on every commit.
-
-!!! tip "Card count changes the answer"
-
-    Several mechanisms here are worth more the more cards are in the split,
-    because they act on boundaries between cards. A single-card result is a
-    regression check, not a demonstration. Both appear in the
-    [timeline](results/index.md), labelled.
+Hardware comparison numbers are diagnostic evidence, not patch speedups or promises for other cards. See the [accepted results](results/index.md) for measured application behavior and tradeoffs.
