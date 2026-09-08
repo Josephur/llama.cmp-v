@@ -1,0 +1,249 @@
+/* llama-cmpv portal styling.
+ *
+ * Two jobs: give the generated timeline a shape that reads as a timeline, and
+ * make a verdict legible at a glance so a page of twenty attempts can be
+ * skimmed. Everything is driven by Material's own custom properties so the
+ * light and dark palettes stay in step with the theme toggle.
+ */
+
+:root {
+  --cmp-kept: #0f766e;
+  --cmp-rejected: #b91c1c;
+  --cmp-inconclusive: #b45309;
+  --cmp-superseded: #6d28d9;
+  --cmp-template: #475569;
+  --cmp-rail: var(--md-default-fg-color--lightest);
+}
+
+[data-md-color-scheme="slate"] {
+  --cmp-kept: #2dd4bf;
+  --cmp-rejected: #f87171;
+  --cmp-inconclusive: #fbbf24;
+  --cmp-superseded: #c4b5fd;
+  --cmp-template: #94a3b8;
+}
+
+/* ---------------------------------------------------------------- timeline */
+
+.cmp-timeline {
+  list-style: none;
+  margin: 1.5rem 0 0;
+  padding: 0;
+}
+
+.cmp-entry {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr;
+  gap: 0 1.25rem;
+  position: relative;
+  padding-bottom: 1.6rem;
+}
+
+.cmp-entry-when {
+  position: relative;
+  text-align: right;
+  padding-top: 0.9rem;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  color: var(--md-default-fg-color--light);
+  white-space: nowrap;
+}
+
+/* The rail, drawn on the date column so it lines up with every marker. */
+.cmp-entry-when::after {
+  content: "";
+  position: absolute;
+  top: 1.35rem;
+  bottom: -1.6rem;
+  right: -0.68rem;
+  width: 2px;
+  background: var(--cmp-rail);
+}
+
+.cmp-entry:last-child .cmp-entry-when::after {
+  display: none;
+}
+
+.cmp-entry-when::before {
+  content: "";
+  position: absolute;
+  top: 1.05rem;
+  right: -1rem;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: var(--md-default-bg-color);
+  border: 2px solid var(--cmp-marker, var(--cmp-rail));
+  z-index: 1;
+}
+
+.cmp-verdict-kept { --cmp-marker: var(--cmp-kept); }
+.cmp-verdict-rejected { --cmp-marker: var(--cmp-rejected); }
+.cmp-verdict-inconclusive { --cmp-marker: var(--cmp-inconclusive); }
+.cmp-verdict-superseded { --cmp-marker: var(--cmp-superseded); }
+.cmp-verdict-template { --cmp-marker: var(--cmp-template); }
+
+.cmp-entry-card {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-left: 3px solid var(--cmp-marker, var(--cmp-rail));
+  border-radius: 0.2rem;
+  padding: 0.7rem 0.9rem 0.5rem;
+  background: var(--md-default-bg-color);
+  transition: border-color 125ms, box-shadow 125ms;
+}
+
+.cmp-entry-card:hover {
+  box-shadow: var(--md-shadow-z1);
+  border-color: var(--md-default-fg-color--lighter);
+  border-left-color: var(--cmp-marker, var(--cmp-rail));
+}
+
+.cmp-entry-head {
+  margin: 0 0 0.35rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-weight: 700;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.cmp-entry-head a {
+  color: var(--md-default-fg-color);
+}
+
+.cmp-entry-head a:hover {
+  color: var(--md-accent-fg-color);
+}
+
+.cmp-pill {
+  font-size: 0.58rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  padding: 0.1rem 0.42rem;
+  border-radius: 1rem;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.cmp-pill-kept { background: var(--cmp-kept); }
+.cmp-pill-rejected { background: var(--cmp-rejected); }
+.cmp-pill-inconclusive { background: var(--cmp-inconclusive); }
+.cmp-pill-superseded { background: var(--cmp-superseded); }
+.cmp-pill-template { background: var(--cmp-template); }
+
+[data-md-color-scheme="slate"] .cmp-pill { color: #0b1120; }
+
+.cmp-entry-banner {
+  margin: 0 0 0.4rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cmp-template);
+}
+
+.cmp-entry-summary {
+  margin: 0 0 0.55rem;
+  font-size: 0.73rem;
+  line-height: 1.55;
+  color: var(--md-default-fg-color--light);
+}
+
+.cmp-entry-meta {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.1rem 0.7rem;
+  margin: 0;
+  font-size: 0.66rem;
+  line-height: 1.5;
+}
+
+.cmp-entry-meta dt {
+  color: var(--md-default-fg-color--lighter);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-size: 0.58rem;
+  padding-top: 0.08rem;
+}
+
+.cmp-entry-meta dd {
+  margin: 0;
+  color: var(--md-default-fg-color--light);
+}
+
+.cmp-entry-meta code {
+  font-size: 0.85em;
+  padding: 0 0.25em;
+}
+
+.cmp-timeline-empty {
+  border: 1px dashed var(--md-default-fg-color--lighter);
+  border-radius: 0.2rem;
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--md-default-fg-color--light);
+}
+
+@media screen and (max-width: 44.9375em) {
+  .cmp-entry {
+    grid-template-columns: 1fr;
+    gap: 0.3rem;
+  }
+  .cmp-entry-when {
+    text-align: left;
+    padding-top: 0;
+  }
+  .cmp-entry-when::before,
+  .cmp-entry-when::after {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------- misc */
+
+/* Mermaid diagrams carry the mechanism, so give them room to breathe and a
+ * frame that survives both palettes.
+ *
+ * Material derives its default Mermaid node colour from the accent colour,
+ * which here is deep orange: every ordinary box then reads as a warning, and
+ * the classDef colours that actually mean something stop standing out. These
+ * overrides make the default node neutral so that teal means kept, red means
+ * rejected, and everything else means nothing. The slate block is repeated
+ * because Material defines these under the scheme selector, which outranks
+ * :root. Custom properties inherit through the closed shadow root Material
+ * renders each diagram into. */
+:root {
+  --md-mermaid-node-bg-color: #e2e8f0;
+  --md-mermaid-node-fg-color: #0f172a;
+  --md-mermaid-label-bg-color: #f8fafc;
+  --md-mermaid-label-fg-color: #0f172a;
+  --md-mermaid-edge-color: #64748b;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-mermaid-node-bg-color: #334155;
+  --md-mermaid-node-fg-color: #e2e8f0;
+  --md-mermaid-label-bg-color: #1e293b;
+  --md-mermaid-label-fg-color: #e2e8f0;
+  --md-mermaid-edge-color: #94a3b8;
+}
+
+.md-typeset .mermaid {
+  margin: 1.2rem 0;
+  padding: 0.6rem;
+  border-radius: 0.2rem;
+  background: var(--md-code-bg-color);
+  overflow-x: auto;
+}
+
+.cmp-data-link {
+  font-size: 0.7rem;
+}
+
+.md-typeset .grid.cards > ul > li {
+  border-radius: 0.2rem;
+}

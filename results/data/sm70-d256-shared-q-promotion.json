@@ -1,0 +1,198 @@
+{
+  "acceptance": "human-reviewed",
+  "accepted_source_commit": "4fe5ecd7536bad00fa4f589a293e9284d2086302",
+  "activation_proven": false,
+  "byte_exact": true,
+  "contexts": [
+    8192,
+    65536,
+    131072,
+    250000
+  ],
+  "decision_rationale": "The user accepted the measured shared-Q plus unit-rescale candidate as a modestly helpful patch after reviewing the saved-baseline comparisons, all generation regressions, additional stack allocation, modified-board profiling limits, and unresolved native repeatability and selector attribution. Human acceptance does not establish statistical significance or native kernel attribution.",
+  "human_decision": "promote",
+  "limitations": [
+    "Historical model file sizes and modification times were not recorded; model file continuity is unverified.",
+    "Separate model regression coverage is not supplied by this comparison.",
+    "Single candidate samples against saved references do not establish repeatability or selector attribution."
+  ],
+  "measurements": [
+    {
+      "activation_proven": false,
+      "arm": "control",
+      "byte_exact": true,
+      "context": 8192,
+      "devices": 6,
+      "model": "primary",
+      "request_wall_seconds": 49.18146054099634,
+      "server_context": 8448,
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 9779.947,
+        "predicted_n": 256,
+        "predicted_per_second": 26.07376093142427,
+        "predicted_per_token_ms": 38.35273333333333,
+        "prompt_ms": 39381.001,
+        "prompt_n": 8192,
+        "prompt_per_second": 208.0190902206879,
+        "prompt_per_token_ms": 4.807251098632812
+      },
+      "tokens": 256
+    },
+    {
+      "activation_proven": false,
+      "arm": "candidate",
+      "byte_exact": true,
+      "context": 8192,
+      "devices": 6,
+      "model": "primary",
+      "request_wall_seconds": 49.025936158999684,
+      "server_context": 8448,
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 9787.914,
+        "predicted_n": 256,
+        "predicted_per_second": 26.0525378543375,
+        "predicted_per_token_ms": 38.38397647058824,
+        "prompt_ms": 39216.64,
+        "prompt_n": 8192,
+        "prompt_per_second": 208.89091977283113,
+        "prompt_per_token_ms": 4.7871875
+      },
+      "tokens": 256
+    },
+    {
+      "activation_proven": false,
+      "arm": "control",
+      "byte_exact": true,
+      "context": 65536,
+      "devices": 6,
+      "model": "primary",
+      "request_wall_seconds": 436.4602168650017,
+      "server_context": 66048,
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 13689.718,
+        "predicted_n": 256,
+        "predicted_per_second": 18.62711854254412,
+        "predicted_per_token_ms": 53.685168627450985,
+        "prompt_ms": 422672.656,
+        "prompt_n": 65536,
+        "prompt_per_second": 155.05143062767704,
+        "prompt_per_token_ms": 6.449472900390625
+      },
+      "tokens": 256
+    },
+    {
+      "activation_proven": false,
+      "arm": "candidate",
+      "byte_exact": true,
+      "context": 65536,
+      "devices": 6,
+      "model": "primary",
+      "request_wall_seconds": 430.4098335890012,
+      "server_context": 66048,
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 14029.578,
+        "predicted_n": 256,
+        "predicted_per_second": 18.17588526183753,
+        "predicted_per_token_ms": 55.01795294117647,
+        "prompt_ms": 416286.856,
+        "prompt_n": 65536,
+        "prompt_per_second": 157.4299045367889,
+        "prompt_per_token_ms": 6.352033325195313
+      },
+      "tokens": 256
+    },
+    {
+      "activation_proven": false,
+      "arm": "control",
+      "byte_exact": true,
+      "context": 131072,
+      "devices": 6,
+      "model": "primary",
+      "request_wall_seconds": 1148.3284944879997,
+      "server_context": 131328,
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 19927.562,
+        "predicted_n": 256,
+        "predicted_per_second": 12.796347089523545,
+        "predicted_per_token_ms": 78.14730196078432,
+        "prompt_ms": 1128218.657,
+        "prompt_n": 131072,
+        "prompt_per_second": 116.17606142813504,
+        "prompt_per_token_ms": 8.607625251770019
+      },
+      "tokens": 256
+    },
+    {
+      "activation_proven": false,
+      "arm": "candidate",
+      "byte_exact": true,
+      "context": 131072,
+      "devices": 6,
+      "model": "primary",
+      "request_wall_seconds": 1123.5065556100017,
+      "server_context": 131328,
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 19744.818,
+        "predicted_n": 256,
+        "predicted_per_second": 12.914780982027791,
+        "predicted_per_token_ms": 77.43065882352941,
+        "prompt_ms": 1103581.265,
+        "prompt_n": 131072,
+        "prompt_per_second": 118.76968571045832,
+        "prompt_per_token_ms": 8.419656867980956
+      },
+      "tokens": 256
+    },
+    {
+      "activation_proven": false,
+      "arm": "control",
+      "byte_exact": true,
+      "context": 250000,
+      "devices": 6,
+      "model": "primary",
+      "request_wall_seconds": 3231.6576527600046,
+      "server_context": 250368,
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 52297.721,
+        "predicted_n": 256,
+        "predicted_per_second": 4.875929488399695,
+        "predicted_per_token_ms": 205.0891019607843,
+        "prompt_ms": 3179024.368,
+        "prompt_n": 250000,
+        "prompt_per_second": 78.64047929814421,
+        "prompt_per_token_ms": 12.716097472
+      },
+      "tokens": 256
+    },
+    {
+      "activation_proven": false,
+      "arm": "candidate",
+      "byte_exact": true,
+      "context": 250000,
+      "devices": 6,
+      "model": "primary",
+      "request_wall_seconds": 3145.1590241910017,
+      "server_context": 250368,
+      "timings": {
+        "cache_n": 0,
+        "predicted_ms": 51965.493,
+        "predicted_n": 256,
+        "predicted_per_second": 4.907102488183841,
+        "predicted_per_token_ms": 203.78624705882353,
+        "prompt_ms": 3092856.799,
+        "prompt_n": 250000,
+        "prompt_per_second": 80.83141776264307,
+        "prompt_per_token_ms": 12.371427196
+      },
+      "tokens": 256
+    }
+  ],
+  "schema": 1
+}
