@@ -9,9 +9,7 @@ Only permanently adopted patches appear here. Each entry links its source patch 
 
 The [benchmark guide](benchmarks.md) explains the linked measurements. The [machine-readable index](index.json) contains the same promoted entries.
 
-The seven inherited entries below retain the date recorded in their original
-patch headers. Since they share that date, they are ordered by their preserved
-application order in the public patch series.
+Inherited entries retain the date recorded in their original patch headers. Entries that share that date follow their preserved application order in the public patch series.
 
 <!-- BEGIN GENERATED TIMELINE -->
 <ol class="cmp-timeline">
@@ -35,9 +33,9 @@ application order in the public patch series.
   <div class="cmp-entry-card">
     <p class="cmp-entry-head"><a href="../patches/mmq-dp4a-routing/">DP4A MMQ routing</a><span class="cmp-pill cmp-pill-kept">kept</span></p>
 
-    <p class="cmp-entry-summary">Adds a selectable DP4A MMQ route for tested quantized SM70 prefill, where the automatic policy chose the generic FP16 tensor-core path. One matched six-card configuration measured 2.36× prefill throughput at 128K; this is not a decode claim.</p>
+    <p class="cmp-entry-summary">Adds a selectable DP4A MMQ route for tested quantized SM70 prefill, where the automatic policy chose the generic FP16 tensor-core path. One matched six-card configuration measured 2.36x prefill throughput at 128K; this is not a decode claim.</p>
     <dl class="cmp-entry-meta">
-      <dt>headline</dt><dd>2.36× matched prefill throughput at 128K</dd>
+      <dt>headline</dt><dd>2.36x matched prefill throughput at 128K</dd>
       <dt>selectors</dt><dd><code>--cuda-mmq force</code></dd>
       <dt>contexts</dt><dd>128K</dd>
       <dt>output</dt><dd>byte-exact</dd>
@@ -65,9 +63,9 @@ application order in the public patch series.
   <div class="cmp-entry-card">
     <p class="cmp-entry-head"><a href="../patches/parallel-model-load/">Parallel model load</a><span class="cmp-pill cmp-pill-kept">kept</span></p>
 
-    <p class="cmp-entry-summary">Overlaps independent per-GPU model uploads using positional reads instead of serially sharing one file offset. Matched cold-start controls were 51–59% faster; it is a readiness improvement, not token-generation throughput.</p>
+    <p class="cmp-entry-summary">Overlaps independent per-GPU model uploads using positional reads instead of serially sharing one file offset. Matched cold-start controls were 51-59% faster; it is a readiness improvement, not token-generation throughput.</p>
     <dl class="cmp-entry-meta">
-      <dt>headline</dt><dd>51–59% faster matched cold start</dd>
+      <dt>headline</dt><dd>51-59% faster matched cold start</dd>
       <dt>selectors</dt><dd><code>LLAMA_MODEL_LOAD_PARALLEL=1</code></dd>
       <dt>contexts</dt><dd>cold start; no mmap, direct I/O, or tensor checking</dd>
       <dt>output</dt><dd>byte-exact</dd>
